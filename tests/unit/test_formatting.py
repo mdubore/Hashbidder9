@@ -25,7 +25,13 @@ from hashbidder.use_cases.set_bids_target import (
     SetBidsTargetResult,
     TargetHashrateInputs,
 )
-from tests.conftest import PH_DAY, UPSTREAM, make_bid_config, make_user_bid
+from tests.conftest import (
+    PH_DAY,
+    SUFFICIENT_BALANCE_CHECK,
+    UPSTREAM,
+    make_bid_config,
+    make_user_bid,
+)
 
 
 def _empty_plan() -> ReconciliationPlan:
@@ -288,7 +294,12 @@ class TestFormatTargetHashrateVerbose:
         plan = ReconciliationPlan(edits=(), creates=(), cancels=(), unchanged=())
         return SetBidsTargetResult(
             inputs=inputs,
-            set_bids_result=SetBidsResult(plan=plan, skipped_bids=(), execution=None),
+            set_bids_result=SetBidsResult(
+                plan=plan,
+                skipped_bids=(),
+                balance_check=SUFFICIENT_BALANCE_CHECK,
+                execution=None,
+            ),
         )
 
     def test_no_existing_bids(self) -> None:

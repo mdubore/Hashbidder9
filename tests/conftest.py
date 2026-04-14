@@ -16,11 +16,13 @@ from hashbidder.client import (
     UserBid,
 )
 from hashbidder.config import BidConfig, SetBidsConfig
+from hashbidder.domain.balance_check import BalanceCheck, BalanceStatus
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.progress import Progress
 from hashbidder.domain.sats import Sats
+from hashbidder.domain.sats_burn_rate import SatsBurnRate
 from hashbidder.domain.stratum_url import StratumUrl
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.mempool_client import ChainStats, MempoolError
@@ -52,6 +54,14 @@ DEFAULT_ACCOUNT_BALANCE = AccountBalance(
     available_sat=Sats(10_000_000_000),
     blocked_sat=Sats(0),
     total_sat=Sats(10_000_000_000),
+)
+
+SUFFICIENT_BALANCE_CHECK = BalanceCheck(
+    required_sat=Sats(0),
+    available_sat=DEFAULT_ACCOUNT_BALANCE.available_sat,
+    burn_rate=SatsBurnRate.zero(),
+    runway=timedelta.max,
+    status=BalanceStatus.SUFFICIENT,
 )
 
 
