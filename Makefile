@@ -1,19 +1,22 @@
-.PHONY: format lint typecheck imports test check
+.PHONY: format lint typecheck imports test check .check-uv
 
-format:
+.check-uv:
+	@command -v uv >/dev/null 2>&1 || { echo >&2 "Error: 'uv' is not installed. Please install it from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
+
+format: .check-uv
 	uv run ruff format .
 	uv run ruff check --select I --fix .
 
-lint:
+lint: .check-uv
 	uv run ruff check .
 
-typecheck:
+typecheck: .check-uv
 	uv run mypy .
 
-imports:
+imports: .check-uv
 	uv run lint-imports
 
-test:
+test: .check-uv
 	uv run pytest -v
 
 check: format lint typecheck imports test
