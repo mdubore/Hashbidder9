@@ -106,6 +106,14 @@ def _ocean_errors() -> Iterator[None]:
         raise click.ClickException(f"Connection error: {e}") from e
 
 
+def _get_http_timeout() -> float:
+    """Read HTTP_TIMEOUT from env, defaulting to 10.0 seconds."""
+    try:
+        return float(os.environ.get("HTTP_TIMEOUT", "10.0"))
+    except ValueError:
+        return 10.0
+
+
 def _setup_logging(verbose: bool, log_file: Path | None) -> None:
     """Configure logging for the application.
 
@@ -144,14 +152,15 @@ def cli(ctx: click.Context, verbose: bool, log_file: Path | None) -> None:
     if ctx.obj is None:
         ctx.obj = Clients()
     app: Clients = ctx.obj
+    timeout = _get_http_timeout()
     if app.braiins is None:
         api_key = os.environ.get("BRAIINS_API_KEY")
-        http_client = httpx.Client(timeout=10.0)
+        http_client = httpx.Client(timeout=timeout)
         app.braiins = BraiinsClient(API_BASE, api_key=api_key, http_client=http_client)
     if app.mempool is None:
-        app.mempool = MempoolClient(_resolve_mempool_url(), httpx.Client(timeout=10.0))
+        app.mempool = MempoolClient(_resolve_mempool_url(), httpx.Client(timeout=timeout))
     if app.ocean is None:
-        app.ocean = OceanClient(DEFAULT_OCEAN_URL, httpx.Client(timeout=10.0))
+        app.ocean = OceanClient(DEFAULT_OCEAN_URL, httpx.Client(timeout=timeout))
 
 
 @cli.command()
