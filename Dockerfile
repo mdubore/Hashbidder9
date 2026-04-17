@@ -17,9 +17,19 @@ RUN uv sync --frozen --no-dev
 # Stage 2: Final Image
 FROM python:3.13-slim
 
-WORKDIR /app
-COPY --from=builder /app /app
+# Create a non-root user
+RUN useradd -m appuser
 
-ENV PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+
+# Copy files and set ownership to the new user
+COPY --from=builder --chown=appuser:appuser /app /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+# Switch to the non-root user
+USER appuser
 
 ENTRYPOINT ["hashbidder"]

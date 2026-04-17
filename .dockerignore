@@ -8,3 +8,6 @@ __pycache__
 .env
 docs
 tests
+.mypy_cache
+.hypothesis
+Makefile
