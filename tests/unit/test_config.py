@@ -241,7 +241,7 @@ url = "stratum+tcp://pool.example.com:3333"
 identity = "worker1"
 """,
         )
-        with pytest.raises(ValueError, match="default_amount_sat must be an integer"):
+        with pytest.raises(ValueError, match="default_amount_sat"):
             load_config(path)
 
     def test_bad_type_bid_price(self, tmp_path: Path) -> None:
@@ -260,7 +260,7 @@ price_sat_per_ph_day = "expensive"
 speed_limit_ph_s = 5.0
 """,
         )
-        with pytest.raises(ValueError, match="price_sat_per_ph_day must be an integer"):
+        with pytest.raises(ValueError, match="price_sat_per_ph_day"):
             load_config(path)
 
     def test_zero_speed_limit_rejected(self, tmp_path: Path) -> None:
@@ -410,7 +410,7 @@ price_sat_per_ph_day = 500
 speed_limit_ph_s = 5.0
 """,
         )
-        with pytest.raises(ValueError, match="target-hashrate"):
+        with pytest.raises(ValueError, match="bids"):
             load_config(path)
 
     def test_target_hashrate_missing_target(self, tmp_path: Path) -> None:

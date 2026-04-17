@@ -1,11 +1,10 @@
-"""Bid configuration file parsing."""
-
 import tomllib
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 from hashbidder.domain.bid_config import BidConfig, SetBidsConfig
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
@@ -22,37 +21,72 @@ __all__ = [
     "load_config",
 ]
 
-
 class ConfigMode(Enum):
-    """Which set-bids config format a file uses."""
-
     EXPLICIT_BIDS = "explicit-bids"
     TARGET_HASHRATE = "target-hashrate"
 
+class UpstreamModel(BaseModel):
+    url: str
+    identity: str
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        try:
+            StratumUrl(v)
+            return v
+        except ValueError as e:
+            raise ValueError(f"Invalid upstream URL: {e}") from e
+
+class BidModel(BaseModel):
+    price_sat_per_ph_day: int
+    speed_limit_ph_s: Decimal
+
+    @field_validator("speed_limit_ph_s")
+    @classmethod
+    def validate_speed(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("speed_limit_ph_s must be positive")
+        return v
+
+class BaseConfigModel(BaseModel):
+    default_amount_sat: int
+
+class ExplicitBidsModel(BaseConfigModel):
+    mode: Literal["explicit-bids"] | None = None
+    upstream: UpstreamModel
+    bids: list[BidModel] = Field(default_factory=list)
+
+class TargetHashrateModel(BaseConfigModel):
+    model_config = {"extra": "forbid"}
+    mode: Literal["target-hashrate"]
+    upstream: UpstreamModel
+    target_hashrate_ph_s: Decimal
+    max_bids_count: int
+
+    @field_validator("target_hashrate_ph_s")
+    @classmethod
+    def validate_target(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("target_hashrate_ph_s must be positive")
+        return v
+
+    @field_validator("max_bids_count")
+    @classmethod
+    def validate_max_bids(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_bids_count must be >= 1")
+        return v
+
+from dataclasses import dataclass
 @dataclass(frozen=True)
 class TargetHashrateConfig:
-    """Parsed set-bids configuration for target-hashrate mode."""
-
     default_amount: Sats
     upstream: Upstream
     target_hashrate: Hashrate
     max_bids_count: int
 
-
 def load_config(path: Path) -> SetBidsConfig | TargetHashrateConfig:
-    """Load and validate a set-bids TOML config file.
-
-    Args:
-        path: Path to the TOML config file.
-
-    Returns:
-        Parsed and validated configuration.
-
-    Raises:
-        FileNotFoundError: If the config file doesn't exist.
-        ValueError: If the config is invalid.
-    """
     with path.open("rb") as f:
         try:
             data = tomllib.load(f)
@@ -60,112 +94,44 @@ def load_config(path: Path) -> SetBidsConfig | TargetHashrateConfig:
             raise ValueError(f"Invalid TOML: {e}") from e
 
     mode_raw = data.get("mode")
-    if mode_raw is None:
-        mode = ConfigMode.EXPLICIT_BIDS
+    if mode_raw is not None and mode_raw not in [m.value for m in ConfigMode]:
+        valid = ", ".join(repr(m.value) for m in ConfigMode)
+        raise ValueError(f"Invalid mode {mode_raw!r}: must be one of {valid}")
+
+    if mode_raw == ConfigMode.TARGET_HASHRATE.value:
+        try:
+            parsed_target = TargetHashrateModel.model_validate(data)
+        except Exception as e:
+            raise ValueError(str(e)) from e
+        return TargetHashrateConfig(
+            default_amount=Sats(parsed_target.default_amount_sat),
+            upstream=Upstream(
+                url=StratumUrl(parsed_target.upstream.url),
+                identity=parsed_target.upstream.identity
+            ),
+            target_hashrate=Hashrate(parsed_target.target_hashrate_ph_s, HashUnit.PH, TimeUnit.SECOND),
+            max_bids_count=parsed_target.max_bids_count
+        )
     else:
         try:
-            mode = ConfigMode(mode_raw)
-        except ValueError as e:
-            valid = ", ".join(repr(m.value) for m in ConfigMode)
-            raise ValueError(
-                f"Invalid mode {mode_raw!r}: must be one of {valid}"
-            ) from e
-
-    default_amount, upstream = _parse_common(data)
-
-    if mode is ConfigMode.TARGET_HASHRATE:
-        return _parse_target_hashrate(data, default_amount, upstream)
-
-    return _parse_explicit_bids(data, default_amount, upstream)
-
-
-def _parse_common(data: dict[str, Any]) -> tuple[Sats, Upstream]:
-    if "default_amount_sat" not in data:
-        raise ValueError("Missing required field: default_amount_sat")
-    default_amount_sat = data["default_amount_sat"]
-    if not isinstance(default_amount_sat, int):
-        raise ValueError("default_amount_sat must be an integer")
-
-    if "upstream" not in data:
-        raise ValueError("Missing required section: [upstream]")
-    upstream_data = data["upstream"]
-    for field in ("url", "identity"):
-        if field not in upstream_data:
-            raise ValueError(f"Missing required upstream field: {field}")
-    try:
-        url = StratumUrl(upstream_data["url"])
-    except ValueError as e:
-        raise ValueError(f"Invalid upstream URL: {e}") from e
-    upstream = Upstream(url=url, identity=upstream_data["identity"])
-    return Sats(default_amount_sat), upstream
-
-
-def _parse_explicit_bids(
-    data: dict[str, Any], default_amount: Sats, upstream: Upstream
-) -> SetBidsConfig:
-    bids_data = data.get("bids", [])
-    bids = []
-    for i, bid_data in enumerate(bids_data):
-        if "price_sat_per_ph_day" not in bid_data:
-            raise ValueError(f"Bid {i}: missing required field: price_sat_per_ph_day")
-        if "speed_limit_ph_s" not in bid_data:
-            raise ValueError(f"Bid {i}: missing required field: speed_limit_ph_s")
-
-        price_raw = bid_data["price_sat_per_ph_day"]
-        if not isinstance(price_raw, int):
-            raise ValueError(f"Bid {i}: price_sat_per_ph_day must be an integer")
-
-        try:
-            speed_raw = Decimal(str(bid_data["speed_limit_ph_s"]))
-        except InvalidOperation as e:
-            raise ValueError(f"Bid {i}: speed_limit_ph_s must be a number") from e
-
-        if speed_raw <= 0:
-            raise ValueError(f"Bid {i}: speed_limit_ph_s must be positive")
-
-        bids.append(
+            parsed_explicit = ExplicitBidsModel.model_validate(data)
+        except Exception as e:
+            raise ValueError(str(e)) from e
+        bids = tuple(
             BidConfig(
                 price=HashratePrice(
-                    sats=Sats(price_raw),
+                    sats=Sats(b.price_sat_per_ph_day),
                     per=Hashrate(Decimal(1), HashUnit.PH, TimeUnit.DAY),
                 ),
-                speed_limit=Hashrate(speed_raw, HashUnit.PH, TimeUnit.SECOND),
+                speed_limit=Hashrate(b.speed_limit_ph_s, HashUnit.PH, TimeUnit.SECOND),
             )
+            for b in parsed_explicit.bids
         )
-
-    return SetBidsConfig(
-        default_amount=default_amount,
-        upstream=upstream,
-        bids=tuple(bids),
-    )
-
-
-def _parse_target_hashrate(
-    data: dict[str, Any], default_amount: Sats, upstream: Upstream
-) -> TargetHashrateConfig:
-    if "bids" in data:
-        raise ValueError("target-hashrate mode does not accept [[bids]] sections")
-
-    if "target_hashrate_ph_s" not in data:
-        raise ValueError("Missing required field: target_hashrate_ph_s")
-    try:
-        target_raw = Decimal(str(data["target_hashrate_ph_s"]))
-    except InvalidOperation as e:
-        raise ValueError("target_hashrate_ph_s must be a number") from e
-    if target_raw <= 0:
-        raise ValueError("target_hashrate_ph_s must be positive")
-
-    if "max_bids_count" not in data:
-        raise ValueError("Missing required field: max_bids_count")
-    max_bids_count = data["max_bids_count"]
-    if not isinstance(max_bids_count, int) or isinstance(max_bids_count, bool):
-        raise ValueError("max_bids_count must be an integer")
-    if max_bids_count < 1:
-        raise ValueError("max_bids_count must be >= 1")
-
-    return TargetHashrateConfig(
-        default_amount=default_amount,
-        upstream=upstream,
-        target_hashrate=Hashrate(target_raw, HashUnit.PH, TimeUnit.SECOND),
-        max_bids_count=max_bids_count,
-    )
+        return SetBidsConfig(
+            default_amount=Sats(parsed_explicit.default_amount_sat),
+            upstream=Upstream(
+                url=StratumUrl(parsed_explicit.upstream.url),
+                identity=parsed_explicit.upstream.identity
+            ),
+            bids=bids
+        )
