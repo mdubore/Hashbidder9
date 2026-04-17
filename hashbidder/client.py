@@ -9,6 +9,7 @@ from typing import Any, NewType, Protocol
 from urllib.parse import unquote
 
 import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
@@ -186,6 +187,25 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     )
 
 
+def _is_transient_braiins_error(e: BaseException) -> bool:
+    if isinstance(e, (httpx.TimeoutException, httpx.RequestError)):
+        return True
+    if isinstance(e, ApiError):
+        return e.is_transient
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code == 429 or e.response.status_code >= 500
+    return False
+
+
+# Define a decorator for reuse
+braiins_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception(_is_transient_braiins_error),
+    reraise=True,
+)
+
+
 class BraiinsClient:
     """HTTP client for the Braiins Hashpower API."""
 
@@ -253,6 +273,7 @@ class BraiinsClient:
             speed.to(self._API_SPEED_HASH_UNIT, self._API_SPEED_TIME_UNIT).value
         )
 
+    @braiins_retry
     def get_orderbook(self) -> OrderBook:
         """Fetch the current spot order book.
 
@@ -306,6 +327,7 @@ class BraiinsClient:
             ),
         )
 
+    @braiins_retry
     def get_current_bids(self) -> tuple[UserBid, ...]:
         """Fetch the authenticated user's active bids.
 
@@ -384,6 +406,7 @@ class BraiinsClient:
         if not response.is_success:
             self._raise_api_error(response)
 
+    @braiins_retry
     def get_market_settings(self) -> MarketSettings:
         """Fetch the current spot market settings.
 
@@ -411,6 +434,7 @@ class BraiinsClient:
             price_tick=PriceTick(sats=Sats(int(data["tick_size_sat"]))),
         )
 
+    @braiins_retry
     def get_account_balance(self) -> AccountBalance:
         """Fetch the authenticated account's balance.
 
