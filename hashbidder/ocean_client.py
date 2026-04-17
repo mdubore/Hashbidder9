@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Protocol
 
 import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import Hashrate, HashUnit
@@ -37,6 +38,24 @@ class OceanError(Exception):
         self.status_code = status_code
         self.message = message
         super().__init__(f"HTTP {status_code}: {message}")
+
+
+def _is_transient_ocean_error(e: BaseException) -> bool:
+    if isinstance(e, (httpx.TimeoutException, httpx.RequestError)):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code == 429 or e.response.status_code >= 500
+    if isinstance(e, OceanError):
+        return e.status_code == 429 or e.status_code >= 500
+    return False
+
+
+ocean_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception(_is_transient_ocean_error),
+    reraise=True,
+)
 
 
 @dataclass(frozen=True)
@@ -125,6 +144,7 @@ class OceanClient:
         self._base_url = base_url
         self._http = http_client
 
+    @ocean_retry
     def get_account_stats(self, address: BtcAddress) -> AccountStats:
         """Fetch hashrate stats for the given address.
 
