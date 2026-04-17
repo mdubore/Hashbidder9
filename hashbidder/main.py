@@ -158,7 +158,9 @@ def cli(ctx: click.Context, verbose: bool, log_file: Path | None) -> None:
         http_client = httpx.Client(timeout=timeout)
         app.braiins = BraiinsClient(API_BASE, api_key=api_key, http_client=http_client)
     if app.mempool is None:
-        app.mempool = MempoolClient(_resolve_mempool_url(), httpx.Client(timeout=timeout))
+        app.mempool = MempoolClient(
+            _resolve_mempool_url(), httpx.Client(timeout=timeout)
+        )
     if app.ocean is None:
         app.ocean = OceanClient(DEFAULT_OCEAN_URL, httpx.Client(timeout=timeout))
 

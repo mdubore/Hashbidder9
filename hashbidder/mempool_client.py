@@ -7,10 +7,9 @@ from decimal import Decimal
 from typing import Protocol
 
 import httpx
-
-from hashbidder.domain.block_height import BlockHeight
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from hashbidder.domain.block_height import BlockHeight
 from hashbidder.domain.sats import Sats
 
 logger = logging.getLogger(__name__)
