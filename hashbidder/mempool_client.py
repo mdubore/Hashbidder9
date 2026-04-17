@@ -9,6 +9,8 @@ from typing import Protocol
 import httpx
 
 from hashbidder.domain.block_height import BlockHeight
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
 from hashbidder.domain.sats import Sats
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,24 @@ class MempoolError(Exception):
         self.status_code = status_code
         self.message = message
         super().__init__(f"HTTP {status_code}: {message}")
+
+
+def _is_transient_mempool_error(e: BaseException) -> bool:
+    if isinstance(e, (httpx.TimeoutException, httpx.RequestError)):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code == 429 or e.response.status_code >= 500
+    if isinstance(e, MempoolError):
+        return e.status_code == 429 or e.status_code >= 500
+    return False
+
+
+mempool_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception(_is_transient_mempool_error),
+    reraise=True,
+)
 
 
 @dataclass(frozen=True)
@@ -66,6 +86,7 @@ class MempoolClient:
             response.text or response.reason_phrase or "Unknown error",
         )
 
+    @mempool_retry
     def get_chain_stats(self, block_count: int) -> ChainStats:
         """Fetch chain tip and reward stats atomically.
 
