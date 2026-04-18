@@ -1,7 +1,6 @@
-import { setupManifest } from '@start9labs/start-sdk'
 import { short, long } from './i18n'
 
-export const manifest = setupManifest({
+export const manifest = {
   id: 'hashbidder9',
   title: 'Hashbidder9',
   license: 'MIT',
@@ -31,4 +30,4 @@ export const manifest = setupManifest({
     stop: null,
   },
   dependencies: {},
-})
+}

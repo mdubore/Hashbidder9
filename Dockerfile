@@ -21,6 +21,9 @@ RUN uv sync --frozen --no-dev
 # Stage 2: Final Image
 FROM python:3.13-slim
 
+# Install gosu
+RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
+
 # Create a non-root user and data directory
 RUN useradd -m appuser && mkdir -p /app/data && chown appuser:appuser /app/data
 
@@ -35,8 +38,5 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Set volume for data persistence
 VOLUME /app/data
-
-# Switch to the non-root user
-USER appuser
 
 ENTRYPOINT ["hashbidder"]

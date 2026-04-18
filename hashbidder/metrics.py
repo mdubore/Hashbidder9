@@ -17,6 +17,15 @@ class MetricRow:
     braiins_connected: bool
     ocean_connected: bool
     mempool_connected: bool
+    # New Fields
+    target_hashrate_phs: Decimal | None = None
+    needed_hashrate_phs: Decimal | None = None
+    market_price_sat: int | None = None
+    bids_active: int | None = None
+    bids_created: int | None = None
+    bids_edited: int | None = None
+    bids_cancelled: int | None = None
+    balance_sat: int | None = None
 
 
 class MetricsRepo:
@@ -42,7 +51,15 @@ class MetricsRepo:
                     ocean_hashrate_phs TEXT,
                     braiins_connected INTEGER,
                     ocean_connected INTEGER,
-                    mempool_connected INTEGER
+                    mempool_connected INTEGER,
+                    target_hashrate_phs TEXT,
+                    needed_hashrate_phs TEXT,
+                    market_price_sat INTEGER,
+                    bids_active INTEGER,
+                    bids_created INTEGER,
+                    bids_edited INTEGER,
+                    bids_cancelled INTEGER,
+                    balance_sat INTEGER
                 )
             """)
             await db.commit()
@@ -55,7 +72,7 @@ class MetricsRepo:
         """
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row.timestamp,
                     str(row.braiins_hashrate_phs),
@@ -63,6 +80,18 @@ class MetricsRepo:
                     int(row.braiins_connected),
                     int(row.ocean_connected),
                     int(row.mempool_connected),
+                    str(row.target_hashrate_phs)
+                    if row.target_hashrate_phs is not None
+                    else None,
+                    str(row.needed_hashrate_phs)
+                    if row.needed_hashrate_phs is not None
+                    else None,
+                    row.market_price_sat,
+                    row.bids_active,
+                    row.bids_created,
+                    row.bids_edited,
+                    row.bids_cancelled,
+                    row.balance_sat,
                 ),
             )
             await db.commit()
@@ -91,6 +120,18 @@ class MetricsRepo:
                     braiins_connected=bool(r["braiins_connected"]),
                     ocean_connected=bool(r["ocean_connected"]),
                     mempool_connected=bool(r["mempool_connected"]),
+                    target_hashrate_phs=Decimal(r["target_hashrate_phs"])
+                    if r["target_hashrate_phs"] is not None
+                    else None,
+                    needed_hashrate_phs=Decimal(r["needed_hashrate_phs"])
+                    if r["needed_hashrate_phs"] is not None
+                    else None,
+                    market_price_sat=r["market_price_sat"],
+                    bids_active=r["bids_active"],
+                    bids_created=r["bids_created"],
+                    bids_edited=r["bids_edited"],
+                    bids_cancelled=r["bids_cancelled"],
+                    balance_sat=r["balance_sat"],
                 )
                 for r in rows
             ]
