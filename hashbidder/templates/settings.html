@@ -6,12 +6,19 @@
     <title>Hashbidder Settings</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <style>
-        body { font-family: sans-serif; margin: 2rem; }
+        body { font-family: sans-serif; margin: 2rem; background-color: #f4f4f9; }
         nav { margin-bottom: 2rem; }
-        .container { max-width: 1200px; margin: auto; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #333; }
-        .nav-links a { margin-right: 1rem; text-decoration: none; color: blue; }
+        .nav-links a { margin-right: 1rem; text-decoration: none; color: #007bff; font-weight: bold; }
         .nav-links a:hover { text-decoration: underline; }
+        form { display: flex; flex-direction: column; gap: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+        label { font-weight: bold; }
+        input, select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 0.75rem; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #218838; }
+        #response { margin-top: 1rem; }
     </style>
 </head>
 <body>
@@ -23,9 +30,56 @@
             </div>
         </nav>
         <h1>Settings</h1>
-        <div id="settings-content">
-            <p>Hashbidder settings can be configured here.</p>
-        </div>
+        <form hx-post="/settings" hx-target="#response" hx-swap="innerHTML">
+            <div class="form-group">
+                <label for="mode">Mode</label>
+                <select id="mode" name="mode">
+                    <option value="target-hashrate" {% if config.get('mode') == 'target-hashrate' %}selected{% endif %}>Target Hashrate</option>
+                    <option value="explicit-bids" {% if config.get('mode') == 'explicit-bids' %}selected{% endif %}>Explicit Bids</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="default_amount_sat">Default Bid Amount (sat)</label>
+                <input type="number" id="default_amount_sat" name="default_amount_sat" value="{{ config.get('default_amount_sat', 100000) }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="upstream_url">Upstream URL</label>
+                <input type="text" id="upstream_url" name="upstream_url" value="{{ config.get('upstream', {}).get('url', '') }}" placeholder="stratum+tcp://..." required>
+            </div>
+
+            <div class="form-group">
+                <label for="upstream_identity">Upstream Identity (Worker Name)</label>
+                <input type="text" id="upstream_identity" name="upstream_identity" value="{{ config.get('upstream', {}).get('identity', '') }}" required>
+            </div>
+
+            <div id="target-hashrate-fields" style="display: {% if config.get('mode', 'target-hashrate') == 'target-hashrate' %}block{% else %}none{% endif %};">
+                <div class="form-group">
+                    <label for="target_hashrate_ph_s">Target Hashrate (PH/s)</label>
+                    <input type="number" step="0.1" id="target_hashrate_ph_s" name="target_hashrate_ph_s" value="{{ config.get('target_hashrate_ph_s', 0) }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="max_bids_count">Max Bids Count</label>
+                    <input type="number" id="max_bids_count" name="max_bids_count" value="{{ config.get('max_bids_count', 1) }}">
+                </div>
+            </div>
+
+            <button type="submit">Save Settings</button>
+        </form>
+        <div id="response"></div>
     </div>
+
+    <script>
+        document.getElementById('mode').addEventListener('change', function() {
+            var fields = document.getElementById('target-hashrate-fields');
+            if (this.value === 'target-hashrate') {
+                fields.style.display = 'block';
+            } else {
+                fields.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
