@@ -237,7 +237,7 @@ class FakeMempoolSource:
         self._chain_stats = chain_stats
         self._error = error
 
-    def get_chain_stats(self, block_count: int) -> ChainStats:
+    async def get_chain_stats(self, block_count: int) -> ChainStats:
         """Return canned chain stats or raise injected error."""
         if self._error:
             raise self._error

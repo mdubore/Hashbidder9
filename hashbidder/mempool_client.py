@@ -57,7 +57,7 @@ class ChainStats:
 class MempoolSource(Protocol):
     """Protocol for mempool data sources."""
 
-    def get_chain_stats(self, block_count: int) -> ChainStats:
+    async def get_chain_stats(self, block_count: int) -> ChainStats:
         """Fetch chain tip and reward stats for the last block_count blocks."""
         ...
 
@@ -68,12 +68,12 @@ class MempoolClient:
     _BLOCKS_PATH = "/api/v1/blocks"
     _REWARD_STATS_PATH = "/api/v1/mining/reward-stats"
 
-    def __init__(self, base_url: httpx.URL, http_client: httpx.Client) -> None:
+    def __init__(self, base_url: httpx.URL, http_client: httpx.AsyncClient) -> None:
         """Initialize the client.
 
         Args:
             base_url: The base URL of the mempool.space instance.
-            http_client: The httpx.Client to use for requests.
+            http_client: The httpx.AsyncClient to use for requests.
         """
         self._base_url = base_url
         self._http = http_client
@@ -86,7 +86,7 @@ class MempoolClient:
         )
 
     @mempool_retry
-    def get_chain_stats(self, block_count: int) -> ChainStats:
+    async def get_chain_stats(self, block_count: int) -> ChainStats:
         """Fetch chain tip and reward stats atomically.
 
         Raises:
@@ -114,7 +114,7 @@ class MempoolClient:
         # the fact.
         stats_url = f"{self._base_url}{self._REWARD_STATS_PATH}/{block_count}"
         logger.debug("GET %s", stats_url)
-        resp = self._http.get(stats_url)
+        resp = await self._http.get(stats_url)
         if not resp.is_success:
             self._raise_error(resp)
         data: dict[str, object] = resp.json()
@@ -124,7 +124,7 @@ class MempoolClient:
         # Get difficulty for the tip block.
         block_url = f"{self._base_url}{self._BLOCKS_PATH}/{tip_height.value}"
         logger.debug("GET %s", block_url)
-        resp = self._http.get(block_url)
+        resp = await self._http.get(block_url)
         if not resp.is_success:
             self._raise_error(resp)
         blocks: list[dict[str, object]] = json.loads(resp.text, parse_float=Decimal)

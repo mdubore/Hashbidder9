@@ -15,14 +15,15 @@ BASE_URL = httpx.URL("http://test-mempool")
 def _make_client(handler: httpx.MockTransport) -> MempoolClient:
     return MempoolClient(
         base_url=BASE_URL,
-        http_client=httpx.Client(transport=handler),
+        http_client=httpx.AsyncClient(transport=handler),
     )
 
 
 class TestGetChainStats:
     """Tests for MempoolClient.get_chain_stats."""
 
-    def test_parses_all_fields(self) -> None:
+    @pytest.mark.asyncio
+    async def test_parses_all_fields(self) -> None:
         """Fetches reward stats then block details for difficulty."""
         captured: list[httpx.Request] = []
 
@@ -46,7 +47,7 @@ class TestGetChainStats:
             )
 
         client = _make_client(httpx.MockTransport(handler))
-        stats = client.get_chain_stats(2016)
+        stats = await client.get_chain_stats(2016)
 
         assert stats.tip_height == BlockHeight(840_000)
         assert stats.difficulty == Decimal("83148355189239.77")
@@ -55,7 +56,8 @@ class TestGetChainStats:
         assert "/api/v1/mining/reward-stats/2016" in str(captured[0].url)
         assert "/api/v1/blocks/840000" in str(captured[1].url)
 
-    def test_reward_stats_error_raises(self) -> None:
+    @pytest.mark.asyncio
+    async def test_reward_stats_error_raises(self) -> None:
         """Non-2xx on reward stats raises MempoolError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -64,11 +66,12 @@ class TestGetChainStats:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(MempoolError) as exc_info:
-            client.get_chain_stats(2016)
+            await client.get_chain_stats(2016)
         assert exc_info.value.status_code == 503
         assert "service unavailable" in exc_info.value.message
 
-    def test_blocks_error_raises(self) -> None:
+    @pytest.mark.asyncio
+    async def test_blocks_error_raises(self) -> None:
         """Non-2xx on block fetch raises MempoolError."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -88,5 +91,5 @@ class TestGetChainStats:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(MempoolError) as exc_info:
-            client.get_chain_stats(2016)
+            await client.get_chain_stats(2016)
         assert exc_info.value.status_code == 500
