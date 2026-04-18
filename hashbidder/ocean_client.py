@@ -76,7 +76,7 @@ class AccountStats:
 class OceanSource(Protocol):
     """Protocol for Ocean data sources."""
 
-    def get_account_stats(self, address: BtcAddress) -> AccountStats:
+    async def get_account_stats(self, address: BtcAddress) -> AccountStats:
         """Fetch hashrate stats for the given address."""
         ...
 
@@ -134,25 +134,25 @@ class OceanClient:
 
     _HASHRATE_ROWS_PATH = "/template/workers/hashrates/rows"
 
-    def __init__(self, base_url: httpx.URL, http_client: httpx.Client) -> None:
+    def __init__(self, base_url: httpx.URL, http_client: httpx.AsyncClient) -> None:
         """Initialize the client.
 
         Args:
             base_url: The base URL of the Ocean.xyz instance.
-            http_client: The httpx.Client to use for requests.
+            http_client: The httpx.AsyncClient to use for requests.
         """
         self._base_url = base_url
         self._http = http_client
 
     @ocean_retry
-    def get_account_stats(self, address: BtcAddress) -> AccountStats:
+    async def get_account_stats(self, address: BtcAddress) -> AccountStats:
         """Fetch hashrate stats for the given address.
 
         Raises:
             OceanError: On HTTP errors or unexpected response schema.
         """
         url = f"{self._base_url}{self._HASHRATE_ROWS_PATH}"
-        resp = self._http.get(url, params={"user": address.value})
+        resp = await self._http.get(url, params={"user": address.value})
         if not resp.is_success:
             raise OceanError(
                 resp.status_code,

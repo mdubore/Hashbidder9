@@ -42,14 +42,15 @@ _VALID_HTML = """\
 def _make_client(handler: httpx.MockTransport) -> OceanClient:
     return OceanClient(
         base_url=httpx.URL("https://ocean.example.com"),
-        http_client=httpx.Client(transport=handler),
+        http_client=httpx.AsyncClient(transport=handler),
     )
 
 
 class TestGetAccountStats:
     """Tests for OceanClient.get_account_stats."""
 
-    def test_happy_path(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_path(self) -> None:
         """Valid HTML fragment is parsed into correct AccountStats."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -57,7 +58,7 @@ class TestGetAccountStats:
             return httpx.Response(200, text=_VALID_HTML)
 
         client = _make_client(httpx.MockTransport(handler))
-        stats = client.get_account_stats(
+        stats = await client.get_account_stats(
             BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
         )
 
@@ -69,7 +70,8 @@ class TestGetAccountStats:
         assert stats.windows[4].window == OceanTimeWindow.SIXTY_SECONDS
         assert stats.windows[4].hashrate.value == Decimal("3.00")
 
-    def test_wrong_number_of_rows(self) -> None:
+    @pytest.mark.asyncio
+    async def test_wrong_number_of_rows(self) -> None:
         """Fewer than 5 rows raises OceanError."""
         html = (
             '<tr class="table-row">'
@@ -84,11 +86,12 @@ class TestGetAccountStats:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(OceanError, match="expected 5 rows"):
-            client.get_account_stats(
+            await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
 
-    def test_unexpected_period_label(self) -> None:
+    @pytest.mark.asyncio
+    async def test_unexpected_period_label(self) -> None:
         """Wrong period label raises OceanError."""
         html = _VALID_HTML.replace("24 hrs", "48 hrs")
 
@@ -97,11 +100,12 @@ class TestGetAccountStats:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(OceanError, match="expected period"):
-            client.get_account_stats(
+            await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
 
-    def test_unrecognized_unit(self) -> None:
+    @pytest.mark.asyncio
+    async def test_unrecognized_unit(self) -> None:
         """Unknown hashrate unit raises OceanError."""
         html = _VALID_HTML.replace("1885.8 Th/s", "1885.8 Xh/s")
 
@@ -110,11 +114,12 @@ class TestGetAccountStats:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(OceanError, match="unrecognized hashrate unit"):
-            client.get_account_stats(
+            await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
 
-    def test_messy_whitespace_in_cells(self) -> None:
+    @pytest.mark.asyncio
+    async def test_messy_whitespace_in_cells(self) -> None:
         """Extra whitespace and newlines inside cells are handled."""
         messy = _VALID_HTML.replace(
             '<td class="table-cell">1885.8 Th/s</td>',
@@ -125,14 +130,15 @@ class TestGetAccountStats:
             return httpx.Response(200, text=messy)
 
         client = _make_client(httpx.MockTransport(handler))
-        stats = client.get_account_stats(
+        stats = await client.get_account_stats(
             BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
         )
 
         assert stats.windows[0].hashrate.value == Decimal("1885.8")
         assert stats.windows[0].hashrate.hash_unit == HashUnit.TH
 
-    def test_http_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_http_error(self) -> None:
         """Non-2xx response raises OceanError with status code."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -140,7 +146,7 @@ class TestGetAccountStats:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(OceanError) as exc_info:
-            client.get_account_stats(
+            await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
         assert exc_info.value.status_code == 500
