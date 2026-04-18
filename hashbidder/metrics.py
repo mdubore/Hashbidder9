@@ -17,6 +17,7 @@ class MetricRow:
     ocean_connected: bool
     mempool_connected: bool
 
+
 class MetricsRepo:
     """SQLite abstraction for storing and retrieving metrics."""
 
@@ -76,7 +77,7 @@ class MetricsRepo:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM metrics WHERE timestamp >= ? ORDER BY timestamp ASC",
-                (since_timestamp,)
+                (since_timestamp,),
             )
             rows = await cursor.fetchall()
             return [
@@ -86,6 +87,7 @@ class MetricsRepo:
                     ocean_hashrate_phs=Decimal(r["ocean_hashrate_phs"]),
                     braiins_connected=bool(r["braiins_connected"]),
                     ocean_connected=bool(r["ocean_connected"]),
-                    mempool_connected=bool(r["mempool_connected"])
-                ) for r in rows
+                    mempool_connected=bool(r["mempool_connected"]),
+                )
+                for r in rows
             ]
