@@ -3,7 +3,7 @@
 from hashbidder.client import HashpowerClient, OrderBook, UserBid
 
 
-def ping(client: HashpowerClient) -> OrderBook:
+async def run_ping(client: HashpowerClient) -> OrderBook:
     """Fetch the current order book.
 
     Args:
@@ -12,10 +12,10 @@ def ping(client: HashpowerClient) -> OrderBook:
     Returns:
         The current spot order book snapshot.
     """
-    return client.get_orderbook()
+    return await client.get_orderbook()
 
 
-def get_current_bids(client: HashpowerClient) -> tuple[UserBid, ...]:
+async def get_current_bids(client: HashpowerClient) -> tuple[UserBid, ...]:
     """Fetch the authenticated user's active bids.
 
     Args:
@@ -24,4 +24,4 @@ def get_current_bids(client: HashpowerClient) -> tuple[UserBid, ...]:
     Returns:
         The user's currently active spot bids.
     """
-    return client.get_current_bids()
+    return await client.get_current_bids()

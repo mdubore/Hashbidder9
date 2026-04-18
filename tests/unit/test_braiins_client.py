@@ -28,7 +28,7 @@ def _make_client(handler: httpx.MockTransport) -> BraiinsClient:
     return BraiinsClient(
         base_url=BASE_URL,
         api_key=API_KEY,
-        http_client=httpx.Client(transport=handler),
+        http_client=httpx.AsyncClient(transport=handler),
     )
 
 
@@ -38,10 +38,11 @@ UPSTREAM = Upstream(
 )
 
 
+@pytest.mark.asyncio
 class TestCreateBid:
     """Tests for BraiinsClient.create_bid serialization."""
 
-    def test_request_body_and_response(self) -> None:
+    async def test_request_body_and_response(self) -> None:
         """Create sends correct body and parses the response ID."""
         captured: list[httpx.Request] = []
 
@@ -57,7 +58,7 @@ class TestCreateBid:
         )
         speed = Hashrate(Decimal("5.0"), HashUnit.PH, TimeUnit.SECOND)
 
-        result = client.create_bid(
+        result = await client.create_bid(
             upstream=UPSTREAM,
             amount_sat=Sats(100_000),
             price=price,
@@ -79,10 +80,11 @@ class TestCreateBid:
         assert req.headers["apikey"] == API_KEY
 
 
+@pytest.mark.asyncio
 class TestEditBid:
     """Tests for BraiinsClient.edit_bid serialization."""
 
-    def test_request_body(self) -> None:
+    async def test_request_body(self) -> None:
         """Edit sends bid_id, price in EH/day, and speed as OptionalDouble."""
         captured: list[httpx.Request] = []
 
@@ -97,7 +99,7 @@ class TestEditBid:
         )
         speed = Hashrate(Decimal("10.0"), HashUnit.PH, TimeUnit.SECOND)
 
-        client.edit_bid(BidId("B123"), new_price=price, new_speed_limit=speed)
+        await client.edit_bid(BidId("B123"), new_price=price, new_speed_limit=speed)
 
         req = captured[0]
         assert req.method == "PUT"
@@ -108,10 +110,11 @@ class TestEditBid:
         assert req.headers["apikey"] == API_KEY
 
 
+@pytest.mark.asyncio
 class TestCancelBid:
     """Tests for BraiinsClient.cancel_bid serialization."""
 
-    def test_request_body(self) -> None:
+    async def test_request_body(self) -> None:
         """Cancel sends order_id in JSON body via DELETE."""
         captured: list[httpx.Request] = []
 
@@ -120,7 +123,7 @@ class TestCancelBid:
             return httpx.Response(200, json={"affected_ids": ["B456"]})
 
         client = _make_client(httpx.MockTransport(handler))
-        client.cancel_bid(BidId("B456"))
+        await client.cancel_bid(BidId("B456"))
 
         req = captured[0]
         assert req.method == "DELETE"
@@ -129,6 +132,7 @@ class TestCancelBid:
         assert req.headers["apikey"] == API_KEY
 
 
+@pytest.mark.asyncio
 class TestGetCurrentBids:
     """Tests for BraiinsClient.get_current_bids parsing."""
 
@@ -157,20 +161,20 @@ class TestGetCurrentBids:
             ]
         }
 
-    def test_parses_last_updated(self) -> None:
+    async def test_parses_last_updated(self) -> None:
         """last_updated is parsed from the bid response JSON as a datetime."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json=self._bid_response_body())
 
         client = _make_client(httpx.MockTransport(handler))
-        bids = client.get_current_bids()
+        bids = await client.get_current_bids()
 
         assert len(bids) == 1
         assert bids[0].id == BidId("B42")
         assert bids[0].last_updated == datetime(2026, 4, 12, 10, 30, tzinfo=UTC)
 
-    def test_handles_missing_state_estimate(self) -> None:
+    async def test_handles_missing_state_estimate(self) -> None:
         """Freshly created bids may lack state_estimate; default to 0% progress."""
         body = self._bid_response_body()
         del body["items"][0]["state_estimate"]  # type: ignore[index]
@@ -179,17 +183,18 @@ class TestGetCurrentBids:
             return httpx.Response(200, json=body)
 
         client = _make_client(httpx.MockTransport(handler))
-        bids = client.get_current_bids()
+        bids = await client.get_current_bids()
 
         assert len(bids) == 1
         assert bids[0].amount_remaining_sat is None
         assert bids[0].progress is None
 
 
+@pytest.mark.asyncio
 class TestGetMarketSettings:
     """Tests for BraiinsClient.get_market_settings parsing."""
 
-    def test_parses_cooldown_periods(self) -> None:
+    async def test_parses_cooldown_periods(self) -> None:
         """Both cooldown fields are parsed from /spot/settings response."""
         captured: list[httpx.Request] = []
 
@@ -205,7 +210,7 @@ class TestGetMarketSettings:
             )
 
         client = _make_client(httpx.MockTransport(handler))
-        settings = client.get_market_settings()
+        settings = await client.get_market_settings()
 
         assert settings.min_bid_price_decrease_period == timedelta(seconds=600)
         assert settings.min_bid_speed_limit_decrease_period == timedelta(seconds=300)
@@ -215,10 +220,11 @@ class TestGetMarketSettings:
         assert captured[0].headers["apikey"] == API_KEY
 
 
+@pytest.mark.asyncio
 class TestGetAccountBalance:
     """Tests for BraiinsClient.get_account_balance parsing."""
 
-    def test_parses_single_account(self) -> None:
+    async def test_parses_single_account(self) -> None:
         """A single-account response is parsed into AccountBalance."""
         captured: list[httpx.Request] = []
 
@@ -249,7 +255,7 @@ class TestGetAccountBalance:
             )
 
         client = _make_client(httpx.MockTransport(handler))
-        balance = client.get_account_balance()
+        balance = await client.get_account_balance()
 
         assert int(balance.available_sat) == 1_200_000
         assert int(balance.blocked_sat) == 300_000
@@ -258,7 +264,7 @@ class TestGetAccountBalance:
         assert captured[0].url.path.endswith("/account/balance")
         assert captured[0].headers["apikey"] == API_KEY
 
-    def test_empty_accounts_raises(self) -> None:
+    async def test_empty_accounts_raises(self) -> None:
         """Zero accounts in the response raises ValueError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -266,9 +272,9 @@ class TestGetAccountBalance:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(ValueError, match="exactly one account"):
-            client.get_account_balance()
+            await client.get_account_balance()
 
-    def test_multiple_accounts_raises(self) -> None:
+    async def test_multiple_accounts_raises(self) -> None:
         """More than one account in the response raises ValueError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -314,13 +320,14 @@ class TestGetAccountBalance:
 
         client = _make_client(httpx.MockTransport(handler))
         with pytest.raises(ValueError, match="exactly one account"):
-            client.get_account_balance()
+            await client.get_account_balance()
 
 
+@pytest.mark.asyncio
 class TestApiErrorParsing:
     """Tests for error response handling."""
 
-    def test_grpc_message_header_decoded(self) -> None:
+    async def test_grpc_message_header_decoded(self) -> None:
         """A grpc-message header is URL-decoded into the ApiError message."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -330,12 +337,12 @@ class TestApiErrorParsing:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(ApiError) as exc_info:
-            client.cancel_bid(BidId("B1"))
+            await client.cancel_bid(BidId("B1"))
         assert exc_info.value.status_code == 400
         assert exc_info.value.message == "grace period not elapsed"
         assert not exc_info.value.is_transient
 
-    def test_json_body_message_extracted(self) -> None:
+    async def test_json_body_message_extracted(self) -> None:
         """A JSON body with a 'message' field is extracted into ApiError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -350,11 +357,11 @@ class TestApiErrorParsing:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(ApiError) as exc_info:
-            client.cancel_bid(BidId("B1"))
+            await client.cancel_bid(BidId("B1"))
         assert exc_info.value.status_code == 403
         assert exc_info.value.message == "You cannot consume this service"
 
-    def test_fallback_to_response_text(self) -> None:
+    async def test_fallback_to_response_text(self) -> None:
         """Without grpc-message or JSON message, falls back to response body text."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -363,10 +370,10 @@ class TestApiErrorParsing:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(ApiError) as exc_info:
-            client.cancel_bid(BidId("B1"))
+            await client.cancel_bid(BidId("B1"))
         assert exc_info.value.message == "bad request body"
 
-    def test_429_is_transient(self) -> None:
+    async def test_429_is_transient(self) -> None:
         """A 429 response is classified as transient."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -375,7 +382,7 @@ class TestApiErrorParsing:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(ApiError) as exc_info:
-            client.create_bid(
+            await client.create_bid(
                 upstream=UPSTREAM,
                 amount_sat=Sats(100),
                 price=HashratePrice(
@@ -388,7 +395,7 @@ class TestApiErrorParsing:
         assert exc_info.value.status_code == 429
         assert exc_info.value.is_transient
 
-    def test_500_is_transient(self) -> None:
+    async def test_500_is_transient(self) -> None:
         """A 500 response is classified as transient."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -397,7 +404,7 @@ class TestApiErrorParsing:
         client = _make_client(httpx.MockTransport(handler))
 
         with pytest.raises(ApiError) as exc_info:
-            client.edit_bid(
+            await client.edit_bid(
                 BidId("B1"),
                 new_price=HashratePrice(
                     sats=Sats(100),

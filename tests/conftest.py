@@ -136,11 +136,11 @@ class FakeClient:
         self._account_balance = account_balance
         self.calls: list[tuple[str, ...]] = []
 
-    def get_market_settings(self) -> MarketSettings:
+    async def get_market_settings(self) -> MarketSettings:
         """Return the canned market settings."""
         return self._market_settings
 
-    def get_account_balance(self) -> AccountBalance:
+    async def get_account_balance(self) -> AccountBalance:
         """Return the canned account balance."""
         return self._account_balance
 
@@ -149,15 +149,15 @@ class FakeClient:
         if errs:
             raise errs.pop(0)
 
-    def get_orderbook(self) -> OrderBook:
+    async def get_orderbook(self) -> OrderBook:
         """Return the canned order book."""
         return self._orderbook
 
-    def get_current_bids(self) -> tuple[UserBid, ...]:
+    async def get_current_bids(self) -> tuple[UserBid, ...]:
         """Return current bids reflecting any mutations."""
         return tuple(self._bids)
 
-    def create_bid(
+    async def create_bid(
         self,
         upstream: Upstream,
         amount_sat: Sats,
@@ -185,7 +185,7 @@ class FakeClient:
         )
         return CreateBidResult(id=bid_id)
 
-    def edit_bid(
+    async def edit_bid(
         self,
         bid_id: BidId,
         new_price: HashratePrice,
@@ -210,7 +210,7 @@ class FakeClient:
                 return
         raise ApiError(404, f"Bid {bid_id} not found")
 
-    def cancel_bid(self, order_id: BidId) -> None:
+    async def cancel_bid(self, order_id: BidId) -> None:
         """Cancel a bid, removing it from internal state."""
         self.calls.append(("cancel_bid", order_id))
         self._maybe_raise("cancel_bid", order_id)
@@ -260,7 +260,7 @@ class FakeOceanSource:
         self._account_stats = account_stats
         self._error = error
 
-    def get_account_stats(self, address: BtcAddress) -> AccountStats:
+    async def get_account_stats(self, address: BtcAddress) -> AccountStats:
         """Return canned account stats or raise injected error."""
         if self._error:
             raise self._error

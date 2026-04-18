@@ -13,7 +13,7 @@ from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.sats import Sats
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.ocean_client import AccountStats, HashrateWindow, OceanTimeWindow
-from hashbidder.use_cases.set_bids_target import set_bids_target
+from hashbidder.use_cases.set_bids_target import run_set_bids_target
 from tests.conftest import UPSTREAM, FakeClient, FakeOceanSource, make_user_bid
 
 ADDRESS = BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
@@ -62,12 +62,13 @@ def _config(target_ph_s: str, max_bids_count: int = 3) -> TargetHashrateConfig:
 class TestSetBidsTarget:
     """Tests for set_bids_target."""
 
-    def test_happy_path_below_target_creates_bids(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_path_below_target_creates_bids(self) -> None:
         """Below target → plan creates bids at market price + 1."""
         client = FakeClient(orderbook=_orderbook(served_price_sat=800_000))
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
 
         inputs = result.inputs
         assert inputs.ocean_24h == _ph_s("5")
@@ -81,40 +82,44 @@ class TestSetBidsTarget:
             assert create.config.price.sats == Sats(801_000)
             assert create.config.speed_limit == _ph_s("5")
 
-    def test_at_target_keeps_running(self) -> None:
+    @pytest.mark.asyncio
+    async def test_at_target_keeps_running(self) -> None:
         """Current == target → needed equals target, plan still creates bids."""
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("10"))
 
-        result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
 
         assert result.inputs.needed == _ph_s("10")
         assert len(result.set_bids_result.plan.creates) == 3
 
-    def test_far_above_target_creates_no_bids(self) -> None:
+    @pytest.mark.asyncio
+    async def test_far_above_target_creates_no_bids(self) -> None:
         """Current >= 2*target → needed clamps to zero and plan is empty."""
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("25"))
 
-        result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
 
         assert result.inputs.needed == _ph_s("0")
         assert result.set_bids_result.plan.creates == ()
 
-    def test_low_needed_single_bid(self) -> None:
+    @pytest.mark.asyncio
+    async def test_low_needed_single_bid(self) -> None:
         """Needed rounds up to a single 1 PH/s bid when below 1 PH/s."""
         # target=10, current=19.4 → needed=0.6 → single 1 PH/s bid
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("19.4"))
 
-        result = set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
 
         assert result.inputs.needed == _ph_s("0.6")
         creates = result.set_bids_result.plan.creates
         assert len(creates) == 1
         assert creates[0].config.speed_limit == _ph_s("1")
 
-    def test_speed_cooldown_locks_existing_bid(self) -> None:
+    @pytest.mark.asyncio
+    async def test_speed_cooldown_locks_existing_bid(self) -> None:
         """A bid still in speed cooldown stays at its current speed in the plan."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
@@ -131,7 +136,7 @@ class TestSetBidsTarget:
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = set_bids_target(
+        result = await run_set_bids_target(
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
@@ -149,7 +154,8 @@ class TestSetBidsTarget:
         for create in plan.creates:
             assert create.config.speed_limit == _ph_s("6")
 
-    def test_price_cooldown_only_keeps_price_speed_freely_assigned(self) -> None:
+    @pytest.mark.asyncio
+    async def test_price_cooldown_only_keeps_price_speed_freely_assigned(self) -> None:
         """Price-only cooldown: bid keeps its price; speed comes from distribution."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
@@ -166,7 +172,7 @@ class TestSetBidsTarget:
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = set_bids_target(
+        result = await run_set_bids_target(
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
@@ -185,7 +191,8 @@ class TestSetBidsTarget:
             assert create.config.price.sats == Sats(501_000)
         assert plan.cancels == ()
 
-    def test_both_cooldowns_lock_price_and_speed(self) -> None:
+    @pytest.mark.asyncio
+    async def test_both_cooldowns_lock_price_and_speed(self) -> None:
         """Both cooldowns: bid is fully frozen; remainder distributes to free slots."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         cooldown_bid = make_user_bid(
@@ -202,7 +209,7 @@ class TestSetBidsTarget:
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = set_bids_target(
+        result = await run_set_bids_target(
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
@@ -219,7 +226,8 @@ class TestSetBidsTarget:
         assert abs(free_total - Decimal("11")) <= Decimal("0.02")
         assert plan.cancels == ()
 
-    def test_all_bids_locked_no_new_creates(self) -> None:
+    @pytest.mark.asyncio
+    async def test_all_bids_locked_no_new_creates(self) -> None:
         """Extreme: every existing bid is fully frozen and fills max_bids_count."""
         now = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
         bids = (
@@ -238,7 +246,7 @@ class TestSetBidsTarget:
         )
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = set_bids_target(
+        result = await run_set_bids_target(
             client, ocean, ADDRESS, _config("10"), dry_run=True, now=now
         )
 
@@ -251,7 +259,8 @@ class TestSetBidsTarget:
         assert plan.creates == ()
         assert plan.cancels == ()
 
-    def test_missing_24h_window_raises(self) -> None:
+    @pytest.mark.asyncio
+    async def test_missing_24h_window_raises(self) -> None:
         """Ocean stats without a 24h window raises ValueError."""
         stats = AccountStats(
             windows=(
@@ -262,4 +271,4 @@ class TestSetBidsTarget:
         ocean = FakeOceanSource(account_stats=stats)
 
         with pytest.raises(ValueError, match="24h window"):
-            set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+            await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)

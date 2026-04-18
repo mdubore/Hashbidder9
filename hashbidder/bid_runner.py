@@ -5,9 +5,9 @@ current bids, plans the diff (via `bid_planner`), and optionally executes
 the plan via `execute_plan`.
 """
 
-import time
+import asyncio
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -50,7 +50,7 @@ class SetBidsResult:
     execution: "ExecutionResult | None" = None
 
 
-def reconcile(
+async def reconcile(
     client: HashpowerClient, config: SetBidsConfig, dry_run: bool
 ) -> SetBidsResult:
     """Bring live bids in line with `config`.
@@ -60,16 +60,16 @@ def reconcile(
     against the API. An `INSUFFICIENT` balance aborts the run entirely:
     no cancels, edits, or creates are executed.
     """
-    current_bids = client.get_current_bids()
+    current_bids = await client.get_current_bids()
     plan = plan_bid_changes(config, current_bids)
     skipped = tuple(b for b in current_bids if b.status not in MANAGEABLE_STATUSES)
-    balance = client.get_account_balance()
+    balance = await client.get_account_balance()
     balance_result = check_balance(plan, balance.available_sat)
     if dry_run or balance_result.status == BalanceStatus.INSUFFICIENT:
         return SetBidsResult(
             plan=plan, skipped_bids=skipped, balance_check=balance_result
         )
-    execution = execute_plan(client, plan)
+    execution = await execute_plan(client, plan)
     return SetBidsResult(
         plan=plan,
         skipped_bids=skipped,
@@ -111,22 +111,22 @@ class ExecutionResult:
     final_bids: tuple[UserBid, ...]
 
 
-def _call_cancel(client: HashpowerClient, cancel: CancelAction) -> BidId | None:
+async def _call_cancel(client: HashpowerClient, cancel: CancelAction) -> BidId | None:
     """Call the cancel API. Returns None (cancel has no created ID)."""
-    client.cancel_bid(cancel.bid.id)
+    await client.cancel_bid(cancel.bid.id)
     return None
 
 
-def _call_edit(client: HashpowerClient, edit: EditAction) -> BidId | None:
+async def _call_edit(client: HashpowerClient, edit: EditAction) -> BidId | None:
     """Call the edit API. Returns None (edit has no created ID)."""
-    client.edit_bid(edit.bid.id, edit.new_price, edit.new_speed_limit_ph)
+    await client.edit_bid(edit.bid.id, edit.new_price, edit.new_speed_limit_ph)
     return None
 
 
-def _call_create(client: HashpowerClient, create: CreateAction) -> BidId | None:
+async def _call_create(client: HashpowerClient, create: CreateAction) -> BidId | None:
     """Call the create API. Returns the new bid ID."""
     cl_order_id = ClOrderId(str(uuid.uuid4()))
-    result = client.create_bid(
+    result = await client.create_bid(
         upstream=create.upstream,
         amount_sat=create.amount,
         price=create.config.price,
@@ -136,22 +136,22 @@ def _call_create(client: HashpowerClient, create: CreateAction) -> BidId | None:
     return result.id
 
 
-def _dispatch(
+async def _dispatch(
     client: HashpowerClient, action: CancelAction | EditAction | CreateAction
 ) -> BidId | None:
     """Dispatch an action to the appropriate client method."""
     if isinstance(action, CancelAction):
-        return _call_cancel(client, action)
+        return await _call_cancel(client, action)
     if isinstance(action, EditAction):
-        return _call_edit(client, action)
-    return _call_create(client, action)
+        return await _call_edit(client, action)
+    return await _call_create(client, action)
 
 
-def _execute_with_retries(
+async def _execute_with_retries(
     client: HashpowerClient,
     action: CancelAction | EditAction | CreateAction,
     outcomes: list[ActionOutcome],
-    sleep: Callable[[float], None],
+    sleep: Callable[[float], Awaitable[None]],
 ) -> bool:
     """Execute an action with retries. Returns True if succeeded.
 
@@ -161,7 +161,7 @@ def _execute_with_retries(
     retry_delay_seconds = 5.0
     for attempt in range(1, max_attempts + 1):
         try:
-            created_id = _dispatch(client, action)
+            created_id = await _dispatch(client, action)
             outcomes.append(
                 ActionOutcome(
                     action=action,
@@ -193,14 +193,14 @@ def _execute_with_retries(
                     max_attempts=max_attempts,
                 )
             )
-            sleep(retry_delay_seconds)
+            await sleep(retry_delay_seconds)
     return False  # pragma: no cover
 
 
-def execute_plan(
+async def execute_plan(
     client: HashpowerClient,
     plan: ReconciliationPlan,
-    sleep: Callable[[float], None] = time.sleep,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> ExecutionResult:
     """Execute a bid plan against the API.
 
@@ -220,20 +220,20 @@ def execute_plan(
     failed_cancel_ids: set[BidId] = set()
 
     for cancel in plan.cancels:
-        succeeded = _execute_with_retries(client, cancel, outcomes, sleep)
+        succeeded = await _execute_with_retries(client, cancel, outcomes, sleep)
         if not succeeded and cancel.reason == CancelReason.UPSTREAM_MISMATCH:
             failed_cancel_ids.add(cancel.bid.id)
 
     for edit in plan.edits:
-        _execute_with_retries(client, edit, outcomes, sleep)
+        await _execute_with_retries(client, edit, outcomes, sleep)
 
     for create in plan.creates:
         if create.replaces is not None and create.replaces.id in failed_cancel_ids:
             outcomes.append(ActionOutcome(action=create, status=ActionStatus.SKIPPED))
             continue
-        _execute_with_retries(client, create, outcomes, sleep)
+        await _execute_with_retries(client, create, outcomes, sleep)
 
     if plan.cancels or plan.edits or plan.creates:
-        sleep(POST_EXECUTE_REFETCH_DELAY_SECONDS)
-    final_bids = client.get_current_bids()
+        await sleep(POST_EXECUTE_REFETCH_DELAY_SECONDS)
+    final_bids = await client.get_current_bids()
     return ExecutionResult(outcomes=tuple(outcomes), final_bids=final_bids)

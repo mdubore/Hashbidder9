@@ -1,5 +1,7 @@
 """Tests for the reconcile orchestration (balance check + execution)."""
 
+import pytest
+
 from hashbidder.bid_runner import reconcile
 from hashbidder.client import AccountBalance
 from hashbidder.domain.balance_check import BalanceStatus
@@ -23,7 +25,8 @@ def _balance(available: int) -> AccountBalance:
 class TestReconcileBalanceCheck:
     """Tests covering the balance-check gate in reconcile."""
 
-    def test_dry_run_runs_balance_check(self) -> None:
+    @pytest.mark.asyncio
+    async def test_dry_run_runs_balance_check(self) -> None:
         """A dry run still surfaces a balance check result."""
         client = FakeClient(
             current_bids=(),
@@ -31,12 +34,13 @@ class TestReconcileBalanceCheck:
         )
         config = make_config(make_bid_config(500, "5.0"), upstream=UPSTREAM)
 
-        result = reconcile(client, config, dry_run=True)
+        result = await reconcile(client, config, dry_run=True)
 
         assert result.execution is None
         assert result.balance_check.status == BalanceStatus.SUFFICIENT
 
-    def test_insufficient_balance_aborts_execution(self) -> None:
+    @pytest.mark.asyncio
+    async def test_insufficient_balance_aborts_execution(self) -> None:
         """INSUFFICIENT balance short-circuits: no API mutations."""
         client = FakeClient(
             current_bids=(),
@@ -45,7 +49,7 @@ class TestReconcileBalanceCheck:
         )
         config = make_config(make_bid_config(500, "5.0"), upstream=UPSTREAM)
 
-        result = reconcile(client, config, dry_run=False)
+        result = await reconcile(client, config, dry_run=False)
 
         assert result.execution is None
         assert result.balance_check.status == BalanceStatus.INSUFFICIENT
@@ -55,7 +59,8 @@ class TestReconcileBalanceCheck:
         ]
         assert mutations == []
 
-    def test_low_balance_still_executes(self) -> None:
+    @pytest.mark.asyncio
+    async def test_low_balance_still_executes(self) -> None:
         """LOW balance is a warning, not a block — execution proceeds."""
         # Burn rate for 500 sat/PH/Day @ 5 PH/s is 9M sat/hour.
         # 71 hours * 9M = 639M available → runway under 72h (LOW),
@@ -66,14 +71,15 @@ class TestReconcileBalanceCheck:
         )
         config = make_config(make_bid_config(500, "5.0"), upstream=UPSTREAM)
 
-        result = reconcile(client, config, dry_run=False)
+        result = await reconcile(client, config, dry_run=False)
 
         assert result.balance_check.status == BalanceStatus.LOW
         assert result.execution is not None
         # One create was issued.
         assert any(c[0] == "create_bid" for c in client.calls)
 
-    def test_sufficient_balance_executes_normally(self) -> None:
+    @pytest.mark.asyncio
+    async def test_sufficient_balance_executes_normally(self) -> None:
         """A comfortable balance executes the plan as before."""
         client = FakeClient(
             current_bids=(),
@@ -81,7 +87,7 @@ class TestReconcileBalanceCheck:
         )
         config = make_config(make_bid_config(500, "5.0"), upstream=UPSTREAM)
 
-        result = reconcile(client, config, dry_run=False)
+        result = await reconcile(client, config, dry_run=False)
 
         assert result.balance_check.status == BalanceStatus.SUFFICIENT
         assert result.execution is not None

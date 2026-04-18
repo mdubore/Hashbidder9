@@ -5,8 +5,8 @@ from hashbidder.client import HashpowerClient
 from hashbidder.config import SetBidsConfig
 
 
-def set_bids(
+async def run_set_bids(
     client: HashpowerClient, config: SetBidsConfig, dry_run: bool
 ) -> SetBidsResult:
     """Reconcile live bids against an explicit config."""
-    return reconcile(client, config, dry_run)
+    return await reconcile(client, config, dry_run)

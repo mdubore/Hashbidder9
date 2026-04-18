@@ -38,15 +38,15 @@ class SetBidsTargetResult:
     set_bids_result: SetBidsResult
 
 
-def _ocean_24h(ocean: OceanSource, address: BtcAddress) -> Hashrate:
-    stats = ocean.get_account_stats(address)
+async def _ocean_24h(ocean: OceanSource, address: BtcAddress) -> Hashrate:
+    stats = await ocean.get_account_stats(address)
     for window in stats.windows:
         if window.window is OceanTimeWindow.DAY:
             return window.hashrate
     raise ValueError("Ocean stats response did not include a 24h window")
 
 
-def set_bids_target(
+async def run_set_bids_target(
     client: HashpowerClient,
     ocean: OceanSource,
     address: BtcAddress,
@@ -68,13 +68,13 @@ def set_bids_target(
     if now is None:
         now = datetime.now(UTC)
 
-    ocean_24h = _ocean_24h(ocean, address)
-    settings = client.get_market_settings()
-    orderbook = client.get_orderbook()
+    ocean_24h = await _ocean_24h(ocean, address)
+    settings = await client.get_market_settings()
+    orderbook = await client.get_orderbook()
     price = find_market_price(orderbook, settings.price_tick)
     needed = compute_needed_hashrate(config.target_hashrate, ocean_24h)
 
-    current_bids = client.get_current_bids()
+    current_bids = await client.get_current_bids()
     annotated = check_cooldowns(current_bids, settings, now)
     bids = plan_with_cooldowns(
         desired_price=price,
@@ -101,5 +101,5 @@ def set_bids_target(
     )
     return SetBidsTargetResult(
         inputs=inputs,
-        set_bids_result=reconcile(client, computed, dry_run),
+        set_bids_result=await reconcile(client, computed, dry_run),
     )
