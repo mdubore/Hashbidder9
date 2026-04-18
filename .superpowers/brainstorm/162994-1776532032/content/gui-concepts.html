@@ -1,0 +1,26 @@
+<h2>Hashbidder GUI Concepts</h2>
+<p class="subtitle">How should we structure the visual application?</p>
+
+<div class="options">
+  <div class="option" data-choice="dashboard" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Monitor Dashboard (Read-Only + Config Editor)</h3>
+      <p>A web dashboard that monitors your current Braiins, Ocean, and Mempool stats in real-time, with a dedicated "Settings" tab to modify <code>bids.toml</code> visually without running the daemon itself.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="control-panel" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Active Control Panel (The Daemon Runner)</h3>
+      <p>A GUI application that <i>replaces</i> the CLI. It has a "Start/Stop" button for the daemon loop, real-time logs scrolling on screen, and visual panels to edit the configuration and current active bids on the fly.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="desktop" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Native Desktop App (System Tray)</h3>
+      <p>A lightweight system tray application (macOS/Windows/Linux) that runs the Python script in the background. Clicking the tray icon opens a small window showing active bids and a config editor.</p>
+    </div>
+  </div>
+</div>

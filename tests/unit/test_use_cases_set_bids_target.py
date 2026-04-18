@@ -68,7 +68,9 @@ class TestSetBidsTarget:
         client = FakeClient(orderbook=_orderbook(served_price_sat=800_000))
         ocean = FakeOceanSource(account_stats=_account_stats("5"))
 
-        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
 
         inputs = result.inputs
         assert inputs.ocean_24h == _ph_s("5")
@@ -88,7 +90,9 @@ class TestSetBidsTarget:
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("10"))
 
-        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
 
         assert result.inputs.needed == _ph_s("10")
         assert len(result.set_bids_result.plan.creates) == 3
@@ -99,7 +103,9 @@ class TestSetBidsTarget:
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("25"))
 
-        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
 
         assert result.inputs.needed == _ph_s("0")
         assert result.set_bids_result.plan.creates == ()
@@ -111,7 +117,9 @@ class TestSetBidsTarget:
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=_account_stats("19.4"))
 
-        result = await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
 
         assert result.inputs.needed == _ph_s("0.6")
         creates = result.set_bids_result.plan.creates
@@ -271,4 +279,6 @@ class TestSetBidsTarget:
         ocean = FakeOceanSource(account_stats=stats)
 
         with pytest.raises(ValueError, match="24h window"):
-            await run_set_bids_target(client, ocean, ADDRESS, _config("10"), dry_run=True)
+            await run_set_bids_target(
+                client, ocean, ADDRESS, _config("10"), dry_run=True
+            )

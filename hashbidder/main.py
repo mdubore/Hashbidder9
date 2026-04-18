@@ -1,12 +1,15 @@
 """Hashbidder CLI."""
 
+import asyncio
 import contextlib
 import logging
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
+from typing import Any, TypeVar
 
 import click
 import httpx
@@ -58,7 +61,34 @@ def _resolve_mempool_url() -> httpx.URL:
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
-logger = logging.getLogger("hashbidder")
+T = TypeVar("T")
+
+
+def coro(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator to run an async function in a new event loop."""
+
+    @wraps(f)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return asyncio.run(f(*args, **kwargs))
+
+    return wrapper
+
+
+@contextlib.asynccontextmanager
+async def _get_clients(app: Clients) -> AsyncIterator[Clients]:
+    """Ensure clients are initialized with an AsyncClient."""
+    timeout = _get_http_timeout()
+    async with httpx.AsyncClient(timeout=timeout) as http_client:
+        if app.braiins is None:
+            api_key = os.environ.get("BRAIINS_API_KEY")
+            app.braiins = BraiinsClient(
+                API_BASE, api_key=api_key, http_client=http_client
+            )
+        if app.mempool is None:
+            app.mempool = MempoolClient(_resolve_mempool_url(), http_client)
+        if app.ocean is None:
+            app.ocean = OceanClient(DEFAULT_OCEAN_URL, http_client)
+        yield app
 
 
 @contextlib.contextmanager
@@ -106,6 +136,9 @@ def _ocean_errors() -> Iterator[None]:
         raise click.ClickException(f"Connection error: {e}") from e
 
 
+logger = logging.getLogger("hashbidder")
+
+
 def _get_http_timeout() -> float:
     """Read HTTP_TIMEOUT from env, defaulting to 10.0 seconds."""
     try:
@@ -149,88 +182,83 @@ def cli(ctx: click.Context, verbose: bool, log_file: Path | None) -> None:
     """Hashbidder CLI."""
     load_dotenv()
     _setup_logging(verbose, log_file)
-    if ctx.obj is None:
-        ctx.obj = Clients()
-    app: Clients = ctx.obj
-    timeout = _get_http_timeout()
-    if app.braiins is None:
-        api_key = os.environ.get("BRAIINS_API_KEY")
-        http_client = httpx.Client(timeout=timeout)
-        app.braiins = BraiinsClient(API_BASE, api_key=api_key, http_client=http_client)
-    if app.mempool is None:
-        app.mempool = MempoolClient(
-            _resolve_mempool_url(), httpx.Client(timeout=timeout)
-        )
-    if app.ocean is None:
-        app.ocean = OceanClient(DEFAULT_OCEAN_URL, httpx.Client(timeout=timeout))
+    ctx.ensure_object(Clients)
 
 
 @cli.command()
 @click.pass_obj
-def ping(app: Clients) -> None:
+@coro
+async def ping(app: Clients) -> None:
     """Check connectivity to the Braiins Hashpower API.
 
     Hits the public /spot/orderbook endpoint and prints a summary
     to confirm the API is reachable.
     """
-    assert app.braiins is not None
-    logger.debug("Fetching order book")
-    with _api_errors():
-        book = use_cases.ping(app.braiins)
-    logger.debug("Order book: %d bids, %d asks", len(book.bids), len(book.asks))
-    click.echo(f"OK — order book: {len(book.bids)} bids, {len(book.asks)} asks")
+    async with _get_clients(app):
+        assert app.braiins is not None
+        logger.debug("Fetching order book")
+        with _api_errors():
+            book = await use_cases.run_ping(app.braiins)
+        logger.debug("Order book: %d bids, %d asks", len(book.bids), len(book.asks))
+        click.echo(f"OK — order book: {len(book.bids)} bids, {len(book.asks)} asks")
 
 
 @cli.command()
 @click.pass_obj
-def bids(app: Clients) -> None:
+@coro
+async def bids(app: Clients) -> None:
     """List your currently active bids."""
-    assert app.braiins is not None
-    logger.debug("Fetching current bids")
-    with _api_errors():
-        current_bids = use_cases.get_current_bids(app.braiins)
+    async with _get_clients(app):
+        assert app.braiins is not None
+        logger.debug("Fetching current bids")
+        with _api_errors():
+            current_bids = await use_cases.get_current_bids(app.braiins)
 
-    if not current_bids:
-        click.echo("No active bids.")
-        return
+        if not current_bids:
+            click.echo("No active bids.")
+            return
 
-    for bid in current_bids:
-        price_per_phs = bid.price.to(HashUnit.PH, TimeUnit.DAY)
-        remaining = (
-            bid.amount_remaining_sat if bid.amount_remaining_sat is not None else "-"
-        )
-        progress = bid.progress if bid.progress is not None else "-"
-        click.echo(
-            f"{bid.id}  {bid.status.name:>14}  "
-            f"price={price_per_phs}  "
-            f"limit={bid.speed_limit_ph}  "
-            f"remaining={remaining} sat  "
-            f"progress={progress}"
-        )
+        for bid in current_bids:
+            price_per_phs = bid.price.to(HashUnit.PH, TimeUnit.DAY)
+            remaining = (
+                bid.amount_remaining_sat
+                if bid.amount_remaining_sat is not None
+                else "-"
+            )
+            progress = bid.progress if bid.progress is not None else "-"
+            click.echo(
+                f"{bid.id}  {bid.status.name:>14}  "
+                f"price={price_per_phs}  "
+                f"limit={bid.speed_limit_ph}  "
+                f"remaining={remaining} sat  "
+                f"progress={progress}"
+            )
 
 
 @cli.command()
 @click.pass_context
-def hashvalue(ctx: click.Context) -> None:
+@coro
+async def hashvalue(ctx: click.Context) -> None:
     """Compute the current hashvalue (sat/PH/Day) from on-chain data."""
     app: Clients = ctx.obj
-    assert app.mempool is not None
-    with _mempool_errors():
-        components = use_cases.get_hashvalue(app.mempool)
+    async with _get_clients(app):
+        assert app.mempool is not None
+        with _mempool_errors():
+            components = await use_cases.run_hashvalue(app.mempool)
 
-    verbose = ctx.find_root().params["verbose"]
-    if verbose:
-        click.echo(format_hashvalue_verbose(components, _resolve_mempool_url()))
-    else:
-        click.echo(format_hashvalue(components))
+        verbose = ctx.find_root().params["verbose"]
+        if verbose:
+            click.echo(format_hashvalue_verbose(components, _resolve_mempool_url()))
+        else:
+            click.echo(format_hashvalue(components))
 
 
 @cli.command("ocean-account-stats")
 @click.pass_context
-def ocean_account_stats(ctx: click.Context) -> None:
+@coro
+async def ocean_account_stats(ctx: click.Context) -> None:
     """Fetch Ocean hashrate stats for a Bitcoin mining address."""
     app: Clients = ctx.obj
-    assert app.ocean is not None
     address_str = os.environ.get("OCEAN_ADDRESS")
     if not address_str:
         click.echo("Error: OCEAN_ADDRESS environment variable is required.", err=True)
@@ -242,9 +270,12 @@ def ocean_account_stats(ctx: click.Context) -> None:
         click.echo(f"Error: invalid OCEAN_ADDRESS: {e}", err=True)
         ctx.exit(1)
         return
-    with _ocean_errors():
-        stats = use_cases.get_ocean_account_stats(app.ocean, address)
-    click.echo(format_ocean_stats(stats, address))
+
+    async with _get_clients(app):
+        assert app.ocean is not None
+        with _ocean_errors():
+            stats = await use_cases.run_ocean(app.ocean, address)
+        click.echo(format_ocean_stats(stats, address))
 
 
 def _resolve_ocean_address(ctx: click.Context) -> BtcAddress:
@@ -269,38 +300,41 @@ def _resolve_ocean_address(ctx: click.Context) -> BtcAddress:
     "--dry-run", is_flag=True, help="Print what would change without executing."
 )
 @click.pass_context
-def set_bids(ctx: click.Context, bid_config: Path, dry_run: bool) -> None:
+@coro
+async def set_bids(ctx: click.Context, bid_config: Path, dry_run: bool) -> None:
     """Set bids to match a config file."""
     app: Clients = ctx.obj
-    assert app.braiins is not None
-    assert app.ocean is not None
     with _api_errors():
         config = load_config(bid_config)
 
-    if isinstance(config, TargetHashrateConfig):
-        address = _resolve_ocean_address(ctx)
-        with _api_errors(), _ocean_errors():
-            target_result = use_cases.set_bids_target(
-                app.braiins, app.ocean, address, config, dry_run
-            )
-        verbose = ctx.find_root().params["verbose"]
-        if verbose:
-            click.echo(format_set_bids_target_result_verbose(target_result))
-        else:
-            click.echo(format_set_bids_target_result(target_result))
-        if (
-            target_result.set_bids_result.balance_check.status
-            == BalanceStatus.INSUFFICIENT
-        ):
-            ctx.exit(1)
-        return
+    async with _get_clients(app):
+        assert app.braiins is not None
+        assert app.ocean is not None
 
-    assert isinstance(config, SetBidsConfig)
-    with _api_errors():
-        result = use_cases.set_bids(app.braiins, config, dry_run)
-    click.echo(format_set_bids_result(result))
-    if result.balance_check.status == BalanceStatus.INSUFFICIENT:
-        ctx.exit(1)
+        if isinstance(config, TargetHashrateConfig):
+            address = _resolve_ocean_address(ctx)
+            with _api_errors(), _ocean_errors():
+                target_result = await use_cases.run_set_bids_target(
+                    app.braiins, app.ocean, address, config, dry_run
+                )
+            verbose = ctx.find_root().params["verbose"]
+            if verbose:
+                click.echo(format_set_bids_target_result_verbose(target_result))
+            else:
+                click.echo(format_set_bids_target_result(target_result))
+            if (
+                target_result.set_bids_result.balance_check.status
+                == BalanceStatus.INSUFFICIENT
+            ):
+                ctx.exit(1)
+            return
+
+        assert isinstance(config, SetBidsConfig)
+        with _api_errors():
+            result = await use_cases.run_set_bids(app.braiins, config, dry_run)
+        click.echo(format_set_bids_result(result))
+        if result.balance_check.status == BalanceStatus.INSUFFICIENT:
+            ctx.exit(1)
 
 
 def main() -> None:

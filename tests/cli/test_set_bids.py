@@ -1,5 +1,6 @@
 """CLI tests for the set-bids command."""
 
+import asyncio
 from decimal import Decimal
 from pathlib import Path
 
@@ -238,7 +239,7 @@ speed_limit_ph_s = 5.0
     assert "2 succeeded, 0 failed" in result.output
     assert "=== Current Bids ===" in result.output
     # Final state should have only the edited bid.
-    final_bids = client.get_current_bids()
+    final_bids = asyncio.run(client.get_current_bids())
     assert len(final_bids) == 1
 
 
@@ -268,7 +269,7 @@ speed_limit_ph_s = 10.0
     assert result.output.count("OK") >= 2
     assert "2 succeeded, 0 failed" in result.output
     assert "=== Current Bids ===" in result.output
-    assert len(client.get_current_bids()) == 2
+    assert len(asyncio.run(client.get_current_bids())) == 2
 
 
 def test_execute_no_changes(tmp_path: Path) -> None:
@@ -322,7 +323,7 @@ speed_limit_ph_s = 5.0
     assert "CREATE 500 sat/PH/Day 5.0 PH/s... OK" in result.output
     assert "2 succeeded, 0 failed" in result.output
     # Old bid canceled, new one created.
-    final_bids = client.get_current_bids()
+    final_bids = asyncio.run(client.get_current_bids())
     assert len(final_bids) == 1
     assert final_bids[0].id != "B1"
 
@@ -372,7 +373,7 @@ class TestTargetHashrateMode:
         assert result.exit_code == 0, result.output
         assert "=== Target Hashrate Inputs ===" in result.output
         assert "3 succeeded, 0 failed" in result.output
-        assert len(client.get_current_bids()) == 3
+        assert len(asyncio.run(client.get_current_bids())) == 3
 
     def test_verbose_dry_run_prints_reasoning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

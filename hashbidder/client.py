@@ -115,15 +115,15 @@ class CreateBidResult:
 class HashpowerClient(Protocol):
     """Protocol for hashpower market clients."""
 
-    def get_orderbook(self) -> OrderBook:
+    async def get_orderbook(self) -> OrderBook:
         """Fetch the current spot order book."""
         ...
 
-    def get_current_bids(self) -> tuple[UserBid, ...]:
+    async def get_current_bids(self) -> tuple[UserBid, ...]:
         """Fetch the authenticated user's active bids."""
         ...
 
-    def create_bid(
+    async def create_bid(
         self,
         upstream: Upstream,
         amount_sat: Sats,
@@ -134,7 +134,7 @@ class HashpowerClient(Protocol):
         """Create a new spot bid."""
         ...
 
-    def edit_bid(
+    async def edit_bid(
         self,
         bid_id: BidId,
         new_price: HashratePrice,
@@ -143,15 +143,15 @@ class HashpowerClient(Protocol):
         """Edit an existing spot bid's price and speed limit."""
         ...
 
-    def cancel_bid(self, order_id: BidId) -> None:
+    async def cancel_bid(self, order_id: BidId) -> None:
         """Cancel an existing spot bid."""
         ...
 
-    def get_market_settings(self) -> MarketSettings:
+    async def get_market_settings(self) -> MarketSettings:
         """Fetch the current spot market settings."""
         ...
 
-    def get_account_balance(self) -> AccountBalance:
+    async def get_account_balance(self) -> AccountBalance:
         """Fetch the authenticated account's balance."""
         ...
 
@@ -225,14 +225,14 @@ class BraiinsClient:
         self,
         base_url: httpx.URL,
         api_key: str | None,
-        http_client: httpx.Client,
+        http_client: httpx.AsyncClient,
     ) -> None:
         """Initialize the client.
 
         Args:
             base_url: The base URL of the Braiins Hashpower API.
             api_key: API token for authenticated endpoints.
-            http_client: The httpx.Client to use for requests.
+            http_client: The httpx.AsyncClient to use for requests.
         """
         self._base_url = base_url
         self._api_key = api_key
@@ -274,7 +274,7 @@ class BraiinsClient:
         )
 
     @braiins_retry
-    def get_orderbook(self) -> OrderBook:
+    async def get_orderbook(self) -> OrderBook:
         """Fetch the current spot order book.
 
         Returns:
@@ -287,7 +287,7 @@ class BraiinsClient:
         """
         url = f"{self._base_url}{self._SPOT_ORDERBOOK_PATH}"
         logger.debug("GET %s", url)
-        response = self._http.get(url)
+        response = await self._http.get(url)
         response.raise_for_status()
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         data: dict[str, list[dict[str, Any]]] = json.loads(
@@ -328,7 +328,7 @@ class BraiinsClient:
         )
 
     @braiins_retry
-    def get_current_bids(self) -> tuple[UserBid, ...]:
+    async def get_current_bids(self) -> tuple[UserBid, ...]:
         """Fetch the authenticated user's active bids.
 
         Returns:
@@ -342,7 +342,7 @@ class BraiinsClient:
         """
         url = f"{self._base_url}{self._SPOT_BID_CURRENT_PATH}"
         logger.debug("GET %s", url)
-        response = self._http.get(url, headers=self._auth_headers())
+        response = await self._http.get(url, headers=self._auth_headers())
         response.raise_for_status()
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         data: dict[str, list[dict[str, Any]]] = json.loads(
@@ -351,7 +351,7 @@ class BraiinsClient:
 
         return tuple(_parse_user_bid(item) for item in data["items"])
 
-    def create_bid(
+    async def create_bid(
         self,
         upstream: Upstream,
         amount_sat: Sats,
@@ -376,14 +376,14 @@ class BraiinsClient:
             "cl_order_id": cl_order_id,
         }
         logger.debug("POST %s %s", url, body)
-        response = self._http.post(url, json=body, headers=self._auth_headers())
+        response = await self._http.post(url, json=body, headers=self._auth_headers())
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         if not response.is_success:
             self._raise_api_error(response)
         data: dict[str, str] = response.json()
         return CreateBidResult(id=BidId(data["id"]))
 
-    def edit_bid(
+    async def edit_bid(
         self,
         bid_id: BidId,
         new_price: HashratePrice,
@@ -401,13 +401,13 @@ class BraiinsClient:
             "new_speed_limit_ph": {"value": self._speed_to_api_value(new_speed_limit)},
         }
         logger.debug("PUT %s %s", url, body)
-        response = self._http.put(url, json=body, headers=self._auth_headers())
+        response = await self._http.put(url, json=body, headers=self._auth_headers())
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         if not response.is_success:
             self._raise_api_error(response)
 
     @braiins_retry
-    def get_market_settings(self) -> MarketSettings:
+    async def get_market_settings(self) -> MarketSettings:
         """Fetch the current spot market settings.
 
         Returns:
@@ -420,7 +420,7 @@ class BraiinsClient:
         """
         url = f"{self._base_url}{self._SPOT_SETTINGS_PATH}"
         logger.debug("GET %s", url)
-        response = self._http.get(url, headers=self._auth_headers())
+        response = await self._http.get(url, headers=self._auth_headers())
         response.raise_for_status()
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         data: dict[str, Any] = response.json()
@@ -435,7 +435,7 @@ class BraiinsClient:
         )
 
     @braiins_retry
-    def get_account_balance(self) -> AccountBalance:
+    async def get_account_balance(self) -> AccountBalance:
         """Fetch the authenticated account's balance.
 
         Expects the response to contain exactly one account.
@@ -449,7 +449,7 @@ class BraiinsClient:
         """
         url = f"{self._base_url}{self._ACCOUNT_BALANCE_PATH}"
         logger.debug("GET %s", url)
-        response = self._http.get(url, headers=self._auth_headers())
+        response = await self._http.get(url, headers=self._auth_headers())
         response.raise_for_status()
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
         data: dict[str, Any] = response.json()
@@ -465,7 +465,7 @@ class BraiinsClient:
             total_sat=Sats(int(account["total_balance_sat"])),
         )
 
-    def cancel_bid(self, order_id: BidId) -> None:
+    async def cancel_bid(self, order_id: BidId) -> None:
         """Cancel an existing spot bid.
 
         Raises:
@@ -474,7 +474,7 @@ class BraiinsClient:
         url = f"{self._base_url}{self._SPOT_BID_PATH}"
         body = {"order_id": order_id}
         logger.debug("DELETE %s %s", url, body)
-        response = self._http.request(
+        response = await self._http.request(
             "DELETE", url, json=body, headers=self._auth_headers()
         )
         logger.debug("Response %s (%d bytes)", response.status_code, len(response.text))
