@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/client.py
+# hypothesis_version: 6.151.11
+
+[429, 500, '/account/balance', '/spot/bid', '/spot/bid/current', '/spot/orderbook', '/spot/settings', 'API_BASE', 'AccountBalance', 'ApiError', 'AskItem', 'BidId', 'BidItem', 'BidStatus', 'BraiinsClient', 'ClOrderId', 'CreateBidResult', 'DELETE', 'DELETE %s %s', 'GET %s', 'HashpowerClient', 'MarketSettings', 'OrderBook', 'POST %s %s', 'PUT %s %s', 'Unknown error', 'Upstream', 'UserBid', 'accounts', 'amount_remaining_sat', 'amount_sat', 'apikey', 'asks', 'bid', 'bid_id', 'bids', 'blocked_balance_sat', 'cl_order_id', 'dest_upstream', 'grpc-message', 'hr_available_ph', 'hr_matched_ph', 'id', 'identity', 'items', 'last_updated', 'message', 'new_price_sat', 'new_speed_limit_ph', 'order_id', 'price_sat', 'progress_pct', 'speed_limit_ph', 'state_estimate', 'status', 'tick_size_sat', 'total_balance_sat', 'url', 'value']

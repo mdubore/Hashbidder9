@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/ocean_client.py
+# hypothesis_version: 6.151.11
+
+[200, 429, 500, '10 min', '24 hrs', '3 hrs', '5 min', '60 sec', 'Unknown error', 'https://ocean.xyz', 'user']

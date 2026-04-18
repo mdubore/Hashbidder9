@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/use_cases/__init__.py
+# hypothesis_version: 6.151.11
+
+['SetBidsTargetResult', 'TargetHashrateInputs', 'get_current_bids', 'get_hashvalue', 'ping', 'set_bids', 'set_bids_target']

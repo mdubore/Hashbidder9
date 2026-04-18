@@ -1,3 +1,17 @@
+# StartOS Packaging
+
+`hashbidder` is fully packaged for StartOS v0.4.0 as **Hashbidder9** (v0.0.1).
+
+**Architecture on StartOS:**
+- **Single Process:** The FastAPI dashboard and the background daemon run in a single container.
+- **Persistence:** All state (`bids.toml` and `hashbidder.sqlite`) is stored in the `/app/data` directory, which is mounted as a StartOS volume.
+- **Configuration:** API keys and Bitcoin addresses are managed through the StartOS Configuration UI, while bidding logic is managed via the app's own Web Dashboard.
+
+**Building the Package:**
+1.  Ensure `start-sdk` dependencies are installed: `npm install`
+2.  Build the `.s9pk`: `make`
+3.  The resulting file can be sideloaded onto StartOS.
+
 # Project Overview
 
 `hashbidder` is a Python-based CLI tool designed to manage bidding on the [Braiins Hashpower](https://academy.braiins.com/en/braiins-hashpower/about/) market automatically. It uses the Hashpower API to align open bids with a provided configuration file. The tool is particularly tailored for miners at the [OCEAN Pool](https://ocean.xyz/) running their own DATUM gateway.

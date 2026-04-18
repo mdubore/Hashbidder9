@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/metrics.py
+# hypothesis_version: 6.151.11
+
+['braiins_connected', 'braiins_hashrate_phs', 'hashbidder.sqlite', 'mempool_connected', 'ocean_connected', 'ocean_hashrate_phs', 'timestamp']

@@ -1,0 +1,17 @@
+{
+  "name": "hashbidder-startos",
+  "version": "0.0.1",
+  "description": "StartOS service package for Hashbidder",
+  "main": "javascript/index.js",
+  "scripts": {
+    "build": "npx ncc build startos/index.ts -o ./javascript"
+  },
+  "dependencies": {
+    "@start9labs/start-sdk": "^0.4.0-beta.59"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vercel/ncc": "^0.38.3",
+    "typescript": "^5.4.0"
+  }
+}

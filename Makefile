@@ -1,22 +1,31 @@
-.PHONY: format lint typecheck imports test check .check-uv
+# Root Makefile for Hashbidder9
 
-.check-uv:
-	@command -v uv >/dev/null 2>&1 || { echo >&2 "Error: 'uv' is not installed. Please install it from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
+.PHONY: all clean check
 
-format: .check-uv
+all: hashbidder9.s9pk
+
+hashbidder9.s9pk: javascript/index.js icon.png
+	start-cli s9pk pack --arch x86_64
+
+javascript/index.js: $(shell find startos -name "*.ts") package.json tsconfig.json
+	npm install
+	npm run build
+
+clean:
+	rm -rf javascript
+	rm -f *.s9pk
+
+format:
 	uv run ruff format .
 	uv run ruff check --select I --fix .
 
-lint: .check-uv
+lint:
 	uv run ruff check .
 
-typecheck: .check-uv
+typecheck:
 	uv run mypy .
 
-imports: .check-uv
-	uv run lint-imports
-
-test: .check-uv
+test:
 	uv run pytest -v
 
-check: format lint typecheck imports test
+check: format lint typecheck test

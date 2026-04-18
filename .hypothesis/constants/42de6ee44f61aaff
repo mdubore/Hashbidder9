@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/domain/hashrate.py
+# hypothesis_version: 6.151.11
+
+[1000, 1000000, 1000000000, 1000000000000, 1000000000000000, 1000000000000000000, '/s']

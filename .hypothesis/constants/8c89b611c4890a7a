@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/domain/balance_check.py
+# hypothesis_version: 6.151.11
+
+['insufficient', 'low', 'sufficient']

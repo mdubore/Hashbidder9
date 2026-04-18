@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/domain/user_bid.py
+# hypothesis_version: 6.151.11
+
+['BID_STATUS_ACTIVE', 'BID_STATUS_CANCELED', 'BID_STATUS_CREATED', 'BID_STATUS_FROZEN', 'BID_STATUS_FULFILLED', 'BID_STATUS_PAUSED', 'BidId']

@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/main.py
+# hypothesis_version: 6.151.11
+
+[10.0, '-', '--bid-config', '--dry-run', '--log-file', '--verbose', '-v', '10.0', 'BRAIINS_API_KEY', 'Fetching order book', 'HTTP_TIMEOUT', 'MEMPOOL_URL', 'No active bids.', 'OCEAN_ADDRESS', 'Request timed out.', 'T', '__main__', 'hashbidder', 'ocean-account-stats', 'set-bids', 'verbose']

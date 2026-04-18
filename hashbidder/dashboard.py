@@ -93,7 +93,7 @@ app = FastAPI(title="Hashbidder Dashboard", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 repo = MetricsRepo()
 
-BIDS_CONFIG_PATH = Path("bids.toml")
+BIDS_CONFIG_PATH = Path(os.environ.get("HASHBIDDER_CONFIG_PATH", "bids.toml"))
 
 
 def save_config_to_toml(data: dict[str, Any], path: Path) -> None:

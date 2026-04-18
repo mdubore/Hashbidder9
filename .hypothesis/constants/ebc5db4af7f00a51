@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/domain/btc_address.py
+# hypothesis_version: 6.151.11
+
+[b'\x00', 33554431, 513874426, 642813549, 705979059, 734539939, 996825010, 1027748829, '1', '3', 'bc', 'bc1', 'big']

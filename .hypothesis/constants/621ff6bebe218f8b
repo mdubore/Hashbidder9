@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/bid_runner.py
+# hypothesis_version: 6.151.11
+
+[3.0, 5.0, 'failed', 'skipped', 'succeeded']

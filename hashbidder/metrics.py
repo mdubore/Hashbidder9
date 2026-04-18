@@ -1,5 +1,6 @@
 """Metrics repository for historical data."""
 
+import os
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -21,13 +22,15 @@ class MetricRow:
 class MetricsRepo:
     """SQLite abstraction for storing and retrieving metrics."""
 
-    def __init__(self, db_path: str = "hashbidder.sqlite") -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         """Initialize the repository.
 
         Args:
             db_path: Path to the SQLite database file.
         """
-        self.db_path = db_path
+        self.db_path = db_path or os.environ.get(
+            "HASHBIDDER_SQLITE_PATH", "hashbidder.sqlite"
+        )
 
     async def init_db(self) -> None:
         """Initialize the database schema."""

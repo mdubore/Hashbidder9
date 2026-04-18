@@ -1,0 +1,11 @@
+name: Build Service
+on:
+  pull_request:
+    branches: [master, main]
+jobs:
+  build:
+    uses: start9labs/shared-workflows/.github/workflows/buildService.yml@master
+    with:
+      REGISTRY: ${{ vars.REGISTRY }}
+    permissions:
+      contents: read

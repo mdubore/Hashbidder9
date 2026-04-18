@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/config.py
+# hypothesis_version: 6.151.11
+
+[', ', 'BidConfig', 'ConfigMode', 'SetBidsConfig', 'TargetHashrateConfig', 'bids', 'default_amount_sat', 'explicit-bids', 'identity', 'load_config', 'max_bids_count', 'mode', 'price_sat_per_ph_day', 'rb', 'speed_limit_ph_s', 'target-hashrate', 'target_hashrate_ph_s', 'upstream', 'url']
