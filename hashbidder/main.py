@@ -13,6 +13,7 @@ from typing import Any, TypeVar
 
 import click
 import httpx
+import uvicorn
 from dotenv import load_dotenv
 
 from hashbidder import use_cases
@@ -335,6 +336,14 @@ async def set_bids(ctx: click.Context, bid_config: Path, dry_run: bool) -> None:
         click.echo(format_set_bids_result(result))
         if result.balance_check.status == BalanceStatus.INSUFFICIENT:
             ctx.exit(1)
+
+
+@cli.command()
+@click.option("--host", default="0.0.0.0")  # noqa: S104
+@click.option("--port", default=8000, type=int)
+def web(host: str, port: int) -> None:
+    """Start the Hashbidder Web Dashboard."""
+    uvicorn.run("hashbidder.dashboard:app", host=host, port=port)
 
 
 def main() -> None:
