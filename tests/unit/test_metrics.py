@@ -29,6 +29,14 @@ async def test_metrics_repo_flow() -> None:
             braiins_connected=True,
             ocean_connected=True,
             mempool_connected=True,
+            target_hashrate_phs=Decimal("5.0"),
+            needed_hashrate_phs=Decimal("3.0"),
+            market_price_sat=100,
+            bids_active=5,
+            bids_created=1,
+            bids_edited=2,
+            bids_cancelled=0,
+            balance_sat=1000000,
         )
         row2 = MetricRow(
             timestamp=1100,
@@ -37,6 +45,14 @@ async def test_metrics_repo_flow() -> None:
             braiins_connected=True,
             ocean_connected=False,
             mempool_connected=True,
+            target_hashrate_phs=Decimal("5.0"),
+            needed_hashrate_phs=Decimal("2.9"),
+            market_price_sat=101,
+            bids_active=6,
+            bids_created=1,
+            bids_edited=0,
+            bids_cancelled=0,
+            balance_sat=900000,
         )
 
         await repo.insert(row1)
