@@ -19,6 +19,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (config?.mempoolUrl) {
     env.MEMPOOL_URL = config.mempoolUrl
   }
+  if (config?.reconciliationInterval) {
+    env.HASHBIDDER_INTERVAL_SECONDS = String(config.reconciliationInterval * 60)
+  }
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
     subcontainer: await sdk.SubContainer.of(
