@@ -129,8 +129,14 @@ async def index(request: Request) -> HTMLResponse:
     # Fetch last 30 days
     thirty_days_ago = int(time.time()) - (30 * 24 * 60 * 60)
     history = await repo.get_history(thirty_days_ago)
+    
+    # Extract current status (latest metric row)
+    current_status = history[-1] if history else None
+    
     return templates.TemplateResponse(
-        request=request, name="index.html", context={"history": history}
+        request=request, 
+        name="index.html", 
+        context={"history": history, "current_status": current_status}
     )
 
 

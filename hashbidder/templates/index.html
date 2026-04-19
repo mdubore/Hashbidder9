@@ -43,6 +43,35 @@
         .nav-links a:hover {
             color: #03dac6;
         }
+        .status-header {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .status-chip {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        .status-green {
+            background-color: #1b5e20;
+            color: #81c784;
+            border: 1px solid #2e7d32;
+        }
+        .status-red {
+            background-color: #b71c1c;
+            color: #ef9a9a;
+            border: 1px solid #c62828;
+        }
+        .status-blue {
+            background-color: #0d47a1;
+            color: #90caf9;
+            border: 1px solid #1565c0;
+        }
     </style>
 </head>
 <body>
@@ -54,6 +83,22 @@
             </div>
         </nav>
         <h1>Hashbidder Performance Dashboard</h1>
+        
+        <div class="status-header">
+            <span class="status-chip {{ 'status-green' if current_status and current_status.braiins_connected else 'status-red' }}">
+                Braiins
+            </span>
+            <span class="status-chip {{ 'status-green' if current_status and current_status.ocean_connected else 'status-red' }}">
+                Ocean
+            </span>
+            <span class="status-chip {{ 'status-green' if current_status and current_status.mempool_connected else 'status-red' }}">
+                Mempool
+            </span>
+            <span class="status-chip status-blue">
+                Balance: {{ "{:,}".format(current_status.balance_sat) if current_status and current_status.balance_sat is not None else "N/A" }} sats
+            </span>
+        </div>
+
         <div id="dashboard-content">
             <p>Welcome to the Hashbidder dashboard. Metrics will appear here.</p>
             <!-- Historical data could be passed to Chart.js here -->
