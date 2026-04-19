@@ -72,6 +72,20 @@
             color: #90caf9;
             border: 1px solid #1565c0;
         }
+        .chart-container {
+            background-color: #252525;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 1px solid #333;
+            height: 400px;
+        }
+        .chart-container h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
@@ -100,10 +114,146 @@
         </div>
 
         <div id="dashboard-content">
-            <p>Welcome to the Hashbidder dashboard. Metrics will appear here.</p>
-            <!-- Historical data could be passed to Chart.js here -->
-            <canvas id="performanceChart" width="800" height="400"></canvas>
+            {% if not history %}
+                <p>No historical data available yet. Metrics will appear here as the daemon runs.</p>
+            {% else %}
+                <div class="chart-container">
+                    <h3>Hashrate Performance (PH/s)</h3>
+                    <canvas id="hashrateChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Market Price Trend (sat/PH/Day)</h3>
+                    <canvas id="priceChart"></canvas>
+                </div>
+            {% endif %}
         </div>
     </div>
+
+    <script>
+        const historyData = [
+            {% for row in history %}
+            {
+                timestamp: new Date({{ row.timestamp }} * 1000),
+                ocean: {{ row.ocean_hashrate_phs | float }},
+                target: {{ row.target_hashrate_phs | float if row.target_hashrate_phs is not None else 'null' }},
+                braiins: {{ row.braiins_hashrate_phs | float }},
+                price: {{ row.market_price_sat if row.market_price_sat is not None else 'null' }}
+            }{{ "," if not loop.last }}
+            {% endfor %}
+        ];
+
+        if (historyData.length > 0) {
+            const labels = historyData.map(d => {
+                return d.timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+                       d.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            });
+            
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        position: 'top',
+                        labels: { color: '#e0e0e0', font: { family: 'Inter', size: 12 } } 
+                    },
+                    tooltip: { 
+                        mode: 'index', 
+                        intersect: false,
+                        backgroundColor: '#1e1e1e',
+                        titleColor: '#ffffff',
+                        bodyColor: '#e0e0e0',
+                        borderColor: '#333',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: { 
+                        ticks: { color: '#b0b0b0', maxRotation: 45, minRotation: 45 }, 
+                        grid: { color: '#333' } 
+                    },
+                    y: { 
+                        ticks: { color: '#b0b0b0' }, 
+                        grid: { color: '#333' },
+                        beginAtZero: true
+                    }
+                }
+            };
+
+            // Hashrate Chart
+            new Chart(document.getElementById('hashrateChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Ocean Actual',
+                            data: historyData.map(d => d.ocean),
+                            borderColor: '#4caf50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2
+                        },
+                        {
+                            label: 'Target',
+                            data: historyData.map(d => d.target),
+                            borderColor: '#bb86fc',
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Braiins Reported',
+                            data: historyData.map(d => d.braiins),
+                            borderColor: '#03dac6',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'PH/s', color: '#b0b0b0' }
+                        }
+                    }
+                }
+            });
+
+            // Price Chart
+            new Chart(document.getElementById('priceChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Market Price',
+                            data: historyData.map(d => d.price),
+                            borderColor: '#ffb74d',
+                            backgroundColor: 'rgba(255, 183, 77, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'sat/PH/Day', color: '#b0b0b0' }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
