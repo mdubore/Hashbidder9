@@ -76,7 +76,6 @@
             background-color: #252525;
             padding: 1.5rem;
             border-radius: 8px;
-            margin-bottom: 2rem;
             border: 1px solid #333;
             height: 400px;
         }
@@ -85,6 +84,12 @@
             margin-bottom: 1rem;
             font-size: 1.1rem;
             color: #ffffff;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
         }
     </style>
 </head>
@@ -122,13 +127,23 @@
             {% if not history %}
                 <p>No historical data available yet. Metrics will appear here as the daemon runs.</p>
             {% else %}
-                <div class="chart-container">
-                    <h3>Hashrate Performance (PH/s)</h3>
-                    <canvas id="hashrateChart"></canvas>
-                </div>
-                <div class="chart-container">
-                    <h3>Market Price Trend (sat/PH/Day)</h3>
-                    <canvas id="priceChart"></canvas>
+                <div class="dashboard-grid">
+                    <div class="chart-container">
+                        <h3>Hashrate Performance (PH/s)</h3>
+                        <canvas id="hashrateChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Market Price Trend (sat/PH/Day)</h3>
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Transmission Quality (Braiins Shares)</h3>
+                        <canvas id="qualityChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Ocean Rewards (Sats)</h3>
+                        <canvas id="rewardChart"></canvas>
+                    </div>
                 </div>
             {% endif %}
         </div>
@@ -142,10 +157,24 @@
                 ocean: {{ row.ocean_hashrate_phs | float if row.ocean_hashrate_phs is not none else 0 }},
                 target: {{ row.target_hashrate_phs | float if row.target_hashrate_phs is not none else 'null' }},
                 braiins: {{ row.braiins_hashrate_phs | float if row.braiins_hashrate_phs is not none else 0 }},
-                price: {{ row.market_price_sat if row.market_price_sat is not none else 'null' }}
+                price: {{ row.market_price_sat if row.market_price_sat is not none else 'null' }},
+                accepted: {{ row.braiins_shares_accepted if row.braiins_shares_accepted is not none else 0 }},
+                rejected: {{ row.braiins_shares_rejected if row.braiins_shares_rejected is not none else 0 }},
+                ocean_shares: {{ row.ocean_shares_window if row.ocean_shares_window is not none else 0 }},
+                estimated_rewards: {{ row.ocean_estimated_rewards_sat if row.ocean_estimated_rewards_sat is not none else 0 }},
+                next_block_earnings: {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }}
             }{{ "," if not loop.last }}
             {% endfor %}
         ];
+
+        function movingAverage(data, period) {
+            return data.map((val, index, arr) => {
+                const start = Math.max(0, index - period + 1);
+                const subset = arr.slice(start, index + 1);
+                const sum = subset.reduce((a, b) => a + b, 0);
+                return sum / subset.length;
+            });
+        }
 
         if (historyData.length > 0) {
             const labels = historyData.map(d => {
@@ -184,6 +213,11 @@
                 }
             };
 
+            const oceanData = historyData.map(d => d.ocean);
+            const ma1d = movingAverage(oceanData, 288);
+            const ma10d = movingAverage(oceanData, 2880);
+            const ma30d = movingAverage(oceanData, 8640);
+
             // Hashrate Chart
             new Chart(document.getElementById('hashrateChart'), {
                 type: 'line',
@@ -192,12 +226,39 @@
                     datasets: [
                         {
                             label: 'Ocean Actual',
-                            data: historyData.map(d => d.ocean),
+                            data: oceanData,
                             borderColor: '#4caf50',
                             backgroundColor: 'rgba(76, 175, 80, 0.1)',
                             fill: true,
                             tension: 0.3,
-                            pointRadius: 2
+                            pointRadius: 1
+                        },
+                        {
+                            label: 'MA 1d',
+                            data: ma1d,
+                            borderColor: '#81c784',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'MA 10d',
+                            data: ma10d,
+                            borderColor: '#ffd54f',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'MA 30d',
+                            data: ma30d,
+                            borderColor: '#ff8a65',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.3
                         },
                         {
                             label: 'Target',
@@ -214,7 +275,7 @@
                             borderColor: '#03dac6',
                             fill: false,
                             tension: 0.3,
-                            pointRadius: 2
+                            pointRadius: 1
                         }
                     ]
                 },
@@ -254,6 +315,116 @@
                         y: {
                             ...commonOptions.scales.y,
                             title: { display: true, text: 'sat/PH/Day', color: '#b0b0b0' }
+                        }
+                    }
+                }
+            });
+
+            // Transmission Quality Chart
+            new Chart(document.getElementById('qualityChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Accepted',
+                            data: historyData.map(d => d.accepted),
+                            borderColor: '#4caf50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                            fill: true,
+                            stack: 'stack1',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Rejected',
+                            data: historyData.map(d => d.rejected),
+                            borderColor: '#f44336',
+                            backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                            fill: true,
+                            stack: 'stack1',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Rejection Ratio',
+                            data: historyData.map(d => {
+                                const total = d.accepted + d.rejected;
+                                return total > 0 ? (d.rejected / total) * 100 : 0;
+                            }),
+                            borderColor: '#ffeb3b',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            stacked: true,
+                            title: { display: true, text: 'Shares', color: '#b0b0b0' }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#ffeb3b', callback: (value) => value + '%' },
+                            title: { display: true, text: 'Ratio (%)', color: '#ffeb3b' }
+                        }
+                    }
+                }
+            });
+
+            // Ocean Rewards Chart
+            new Chart(document.getElementById('rewardChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Est. Rewards (Window)',
+                            data: historyData.map(d => d.estimated_rewards),
+                            borderColor: '#bb86fc',
+                            backgroundColor: 'rgba(187, 134, 252, 0.1)',
+                            fill: true,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Est. Earnings (Next Block)',
+                            data: historyData.map(d => d.next_block_earnings),
+                            borderColor: '#03dac6',
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Shares in Window',
+                            data: historyData.map(d => d.ocean_shares),
+                            borderColor: '#ffb74d',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'Sats', color: '#b0b0b0' }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#ffb74d' },
+                            title: { display: true, text: 'Shares', color: '#ffb74d' }
                         }
                     }
                 }
