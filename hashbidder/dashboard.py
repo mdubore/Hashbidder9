@@ -170,8 +170,8 @@ async def post_settings(
     default_amount_sat: Annotated[int, Form()],
     upstream_url: Annotated[str, Form()],
     upstream_identity: Annotated[str, Form()],
-    target_hashrate_ph_s: Annotated[Decimal | None, Form()] = None,
-    max_bids_count: Annotated[int | None, Form()] = None,
+    target_hashrate_ph_s: Annotated[str | None, Form()] = None,
+    max_bids_count: Annotated[str | None, Form()] = None,
 ) -> HTMLResponse:
     """Save updated settings to config file."""
     try:
@@ -185,8 +185,12 @@ async def post_settings(
         }
 
         if mode == "target-hashrate":
-            data["target_hashrate_ph_s"] = target_hashrate_ph_s
-            data["max_bids_count"] = max_bids_count
+            data["target_hashrate_ph_s"] = (
+                Decimal(target_hashrate_ph_s) if target_hashrate_ph_s else None
+            )
+            data["max_bids_count"] = (
+                int(max_bids_count) if max_bids_count else None
+            )
             TargetHashrateModel.model_validate(data)
         else:
             # For now, explicit-bids with no bids from form
