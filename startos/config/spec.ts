@@ -22,11 +22,13 @@ export const configSpec = InputSpec.of({
   }),
   reconciliationInterval: Value.number({
     name: 'Reconciliation Interval (minutes)',
-    description: 'How often the daemon checks the market and updates bids. 1 minute is recommended for volatile markets.',
+    description:
+      'How often the daemon checks the market and updates bids. 1 minute is recommended for volatile markets.',
     required: true,
     default: 5,
-    range: '[1, 60]',
-    integral: true,
+    min: 1,
+    max: 60,
+    integer: true,
   }),
 })
 

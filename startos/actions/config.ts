@@ -15,7 +15,12 @@ export const configure = sdk.Action.withInput(
   configSpec,
   async ({ effects, prefill }) => {
     const config = await configHelper.read().once()
-    return config || {}
+    return {
+      braiinsApiKey: config?.braiinsApiKey ?? null,
+      oceanAddress: config?.oceanAddress ?? null,
+      mempoolUrl: config?.mempoolUrl ?? 'https://mempool.space',
+      reconciliationInterval: config?.reconciliationInterval ?? 5,
+    }
   },
   async ({ effects, input }) => {
     await configHelper.write(effects, input)
