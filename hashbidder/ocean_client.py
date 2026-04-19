@@ -105,9 +105,12 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
 
     return AccountStats(
         windows=tuple(windows),
-        shares_window=data.get("shares_window"),
-        estimated_rewards=data.get("estimated_rewards"),
-        next_block_earnings=data.get("next_block_earnings"),
+        shares_window=data.get("shares_in_window") or data.get("shares_window"),
+        estimated_rewards=data.get("estimated_rewards_in_window")
+        or data.get("estimated_rewards"),
+        next_block_earnings=data.get("estimated_earnings_next_block")
+        or data.get("next_block_earnings")
+        or data.get("estimated_earnings"),
     )
 
 

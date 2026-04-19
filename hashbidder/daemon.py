@@ -137,7 +137,14 @@ async def _tick(
         current_bids = await braiins_client.get_current_bids()
         bids_active = len(current_bids)
         for bid in current_bids:
-            braiins_hashrate_phs += bid.speed_limit_ph.value
+            # Use Delivered Hashrate (Averaged) for the primary Braiins line.
+            # Use Current Speed (Momentary) if you wanted to see the jitter.
+            # We'll use delivered_hashrate as it's more stable for the dashboard.
+            if bid.delivered_hashrate:
+                braiins_hashrate_phs += bid.delivered_hashrate.to(
+                    HashUnit.PH, TimeUnit.SECOND
+                ).value
+
             if bid.shares_accepted is not None:
                 braiins_shares_accepted += bid.shares_accepted
             if bid.shares_rejected is not None:
@@ -156,11 +163,22 @@ async def _tick(
         ocean_estimated_rewards_sat = stats.estimated_rewards
         ocean_next_block_earnings_sat = stats.next_block_earnings
         for window in stats.windows:
-            if window.window is OceanTimeWindow.DAY:
+            # Switch to 1-hour or 5-minute for "Actual" pulses.
+            # We'll use DAY (24h) for the legacy line, but we should consider
+            # picking the smallest available window for the "Actual" reception.
+            if window.window is OceanTimeWindow.FIVE_MINUTES:
                 ocean_hashrate_phs = window.hashrate.to(
                     HashUnit.PH, TimeUnit.SECOND
                 ).value
                 break
+        # Fallback to DAY if 5m is missing
+        if ocean_hashrate_phs == 0:
+            for window in stats.windows:
+                if window.window is OceanTimeWindow.DAY:
+                    ocean_hashrate_phs = window.hashrate.to(
+                        HashUnit.PH, TimeUnit.SECOND
+                    ).value
+                    break
         ocean_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Ocean metrics: %s", e)

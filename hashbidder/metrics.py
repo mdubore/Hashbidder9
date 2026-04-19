@@ -1,5 +1,6 @@
 """Metrics repository for historical data."""
 
+import contextlib
 import os
 from dataclasses import dataclass
 from decimal import Decimal
@@ -84,12 +85,10 @@ class MetricsRepo:
                 ("ocean_next_block_earnings_sat", "INTEGER"),
             ]
             for col_name, col_type in columns:
-                try:
+                with contextlib.suppress(aiosqlite.OperationalError):
                     await db.execute(
                         f"ALTER TABLE metrics ADD COLUMN {col_name} {col_type}"
                     )
-                except aiosqlite.OperationalError:
-                    pass  # Column already exists
 
             await db.commit()
 
@@ -100,8 +99,9 @@ class MetricsRepo:
             row: The MetricRow to insert.
         """
         async with aiosqlite.connect(self.db_path) as db:
+            query = "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             await db.execute(
-                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                query,
                 (
                     row.timestamp,
                     str(row.braiins_hashrate_phs),

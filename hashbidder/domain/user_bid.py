@@ -41,3 +41,5 @@ class UserBid:
     upstream: Upstream | None
     shares_accepted: int | None = None
     shares_rejected: int | None = None
+    current_speed: Hashrate | None = None
+    delivered_hashrate: Hashrate | None = None
