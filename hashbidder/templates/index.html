@@ -110,7 +110,7 @@
             </span>
             <span class="status-chip status-blue">
                 Balance: 
-                {% if current_status and current_status.balance_sat is not None %}
+                {% if current_status and current_status.balance_sat is not none %}
                     {{ current_status.balance_sat }} sats
                 {% else %}
                     N/A
@@ -139,10 +139,10 @@
             {% for row in history %}
             {
                 timestamp: new Date({{ row.timestamp }} * 1000),
-                ocean: {{ row.ocean_hashrate_phs | float if row.ocean_hashrate_phs is not None else 0 }},
-                target: {{ row.target_hashrate_phs | float if row.target_hashrate_phs is not None else 'null' }},
-                braiins: {{ row.braiins_hashrate_phs | float if row.braiins_hashrate_phs is not None else 0 }},
-                price: {{ row.market_price_sat if row.market_price_sat is not None else 'null' }}
+                ocean: {{ row.ocean_hashrate_phs | float if row.ocean_hashrate_phs is not none else 0 }},
+                target: {{ row.target_hashrate_phs | float if row.target_hashrate_phs is not none else 'null' }},
+                braiins: {{ row.braiins_hashrate_phs | float if row.braiins_hashrate_phs is not none else 0 }},
+                price: {{ row.market_price_sat if row.market_price_sat is not none else 'null' }}
             }{{ "," if not loop.last }}
             {% endfor %}
         ];
