@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/metrics.py
+# hypothesis_version: 6.151.11
+
+['balance_sat', 'bids_active', 'bids_cancelled', 'bids_created', 'bids_edited', 'braiins_connected', 'braiins_hashrate_phs', 'hashbidder.sqlite', 'market_price_sat', 'mempool_connected', 'needed_hashrate_phs', 'ocean_connected', 'ocean_hashrate_phs', 'target_hashrate_phs', 'timestamp']

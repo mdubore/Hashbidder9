@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `hashbidder/metrics.py`
 
-- [ ] **Step 1: Update `MetricRow` dataclass and `MetricsRepo.init_db`**
+- [x] **Step 1: Update `MetricRow` dataclass and `MetricsRepo.init_db`**
 
 Add the new fields to the dataclass and the SQL schema.
 
@@ -41,11 +41,11 @@ class MetricRow:
 
 Update `init_db` to include these columns in the `metrics` table. Note: Use `TEXT` for Decimals for consistency with existing pattern.
 
-- [ ] **Step 2: Update `MetricsRepo.insert` and `get_history`**
+- [x] **Step 2: Update `MetricsRepo.insert` and `get_history`**
 
 Update the SQL queries to handle the new columns.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add hashbidder/metrics.py

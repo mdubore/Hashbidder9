@@ -14,7 +14,7 @@ from hashbidder.domain.sats import Sats
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MEMPOOL_URL = httpx.URL("https://mempool.bitcoinbarcelona.xyz")
+DEFAULT_MEMPOOL_URL = httpx.URL("https://mempool.space")
 
 
 class MempoolError(Exception):

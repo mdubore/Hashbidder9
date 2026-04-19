@@ -14,15 +14,23 @@ export const configSpec = InputSpec.of({
     required: false,
     default: null,
   }),
+  mempoolUrl: Value.text({
+    name: 'Mempool API URL',
+    description: 'Custom Mempool.space instance (e.g. http://mempool.embassy)',
+    required: false,
+    default: 'https://mempool.space',
+  }),
 })
 
 export type Config = {
   braiinsApiKey?: string | null
   oceanAddress?: string | null
+  mempoolUrl?: string | null
 }
 
 import { z } from '@start9labs/start-sdk'
 export const configSchema = z.object({
   braiinsApiKey: z.string().nullable().optional(),
   oceanAddress: z.string().nullable().optional(),
+  mempoolUrl: z.string().nullable().optional(),
 })

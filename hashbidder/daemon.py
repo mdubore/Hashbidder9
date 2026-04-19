@@ -7,10 +7,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from hashbidder import use_cases
+from hashbidder.bid_runner import ActionStatus
 from hashbidder.client import HashpowerClient
 from hashbidder.config import TargetHashrateConfig, load_config
+from hashbidder.domain.bid_planning import CancelAction, CreateAction, EditAction
 from hashbidder.domain.btc_address import BtcAddress
-from hashbidder.domain.hashrate import Hashrate, HashUnit
+from hashbidder.domain.hashrate import HashUnit
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.mempool_client import MempoolSource
 from hashbidder.metrics import MetricRow, MetricsRepo
@@ -69,67 +71,131 @@ async def _tick(
     ocean_address: BtcAddress,
 ) -> None:
     """Execute a single tick: metrics collection then reconciliation."""
-    # 1. Collect Metrics
-    # Initialize with zero and disconnected; update as we successfully fetch data.
-    braiins_hashrate = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
+    # 1. Setup & Config
     braiins_connected = False
-    try:
-        current_bids = await braiins_client.get_current_bids()
-        for bid in current_bids:
-            braiins_hashrate += bid.speed_limit_ph
-        braiins_connected = True
-    except Exception as e:
-        logger.warning("Failed to fetch Braiins metrics: %s", e)
-
-    ocean_hashrate = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
     ocean_connected = False
-    try:
-        stats = await ocean_client.get_account_stats(ocean_address)
-        for window in stats.windows:
-            if window.window is OceanTimeWindow.DAY:
-                ocean_hashrate = window.hashrate.to(HashUnit.PH, TimeUnit.SECOND)
-                break
-        ocean_connected = True
-    except Exception as e:
-        logger.warning("Failed to fetch Ocean metrics: %s", e)
-
     mempool_connected = False
-    try:
-        # Ping mempool with a simple request.
-        await mempool_client.get_chain_stats(block_count=1)
-        mempool_connected = True
-    except Exception as e:
-        logger.warning("Failed to fetch Mempool metrics: %s", e)
 
-    # 2. Record Metrics
-    # We record metrics even if reconciliation fails or connectivity is partial.
-    row = MetricRow(
-        timestamp=int(datetime.now(UTC).timestamp()),
-        braiins_hashrate_phs=braiins_hashrate.value,
-        ocean_hashrate_phs=ocean_hashrate.value,
-        braiins_connected=braiins_connected,
-        ocean_connected=ocean_connected,
-        mempool_connected=mempool_connected,
-    )
-    await metrics_repo.insert(row)
+    target_hashrate_phs = None
+    needed_hashrate_phs = None
+    market_price_sat = None
+    bids_created = 0
+    bids_edited = 0
+    bids_cancelled = 0
 
-    # 3. Load Config and Reconcile
     try:
         config = load_config(config_path)
+    except Exception as e:
+        logger.error("Failed to load config: %s", e)
+        return
+
+    # 2. Reconcile
+    try:
         if isinstance(config, TargetHashrateConfig):
-            await use_cases.run_set_bids_target(
+            res = await use_cases.run_set_bids_target(
                 client=braiins_client,
                 ocean=ocean_client,
                 address=ocean_address,
                 config=config,
                 dry_run=False,
             )
+            set_bids_result = res.set_bids_result
+            target_hashrate_phs = (
+                res.inputs.target.to(HashUnit.PH, TimeUnit.SECOND).value
+            )
+            needed_hashrate_phs = (
+                res.inputs.needed.to(HashUnit.PH, TimeUnit.SECOND).value
+            )
+            market_price_sat = int(res.inputs.price.to(HashUnit.PH, TimeUnit.DAY).sats)
+            ocean_connected = True
         else:
-            await use_cases.run_set_bids(
+            set_bids_result = await use_cases.run_set_bids(
                 client=braiins_client,
                 config=config,
                 dry_run=False,
             )
-        logger.info("Successfully completed bid reconciliation")
+        braiins_connected = True
+
+        if set_bids_result.execution:
+            for outcome in set_bids_result.execution.outcomes:
+                if outcome.status == ActionStatus.SUCCEEDED:
+                    if isinstance(outcome.action, CreateAction):
+                        bids_created += 1
+                    elif isinstance(outcome.action, EditAction):
+                        bids_edited += 1
+                    elif isinstance(outcome.action, CancelAction):
+                        bids_cancelled += 1
     except Exception as e:
         logger.error("Reconciliation failed: %s", e)
+
+    # 3. Final Metrics Collection
+    braiins_hashrate_phs = Decimal(0)
+    bids_active = 0
+    try:
+        current_bids = await braiins_client.get_current_bids()
+        bids_active = len(current_bids)
+        for bid in current_bids:
+            braiins_hashrate_phs += bid.speed_limit_ph.value
+        braiins_connected = True
+    except Exception as e:
+        logger.warning("Failed to fetch Braiins metrics: %s", e)
+
+    ocean_hashrate_phs = Decimal(0)
+    try:
+        stats = await ocean_client.get_account_stats(ocean_address)
+        for window in stats.windows:
+            if window.window is OceanTimeWindow.DAY:
+                ocean_hashrate_phs = (
+                    window.hashrate.to(HashUnit.PH, TimeUnit.SECOND).value
+                )
+                break
+        ocean_connected = True
+    except Exception as e:
+        logger.warning("Failed to fetch Ocean metrics: %s", e)
+
+    try:
+        await mempool_client.get_chain_stats(block_count=1)
+        mempool_connected = True
+    except Exception as e:
+        logger.warning("Failed to fetch Mempool metrics: %s", e)
+
+    balance_sat = None
+    try:
+        balance = await braiins_client.get_account_balance()
+        balance_sat = balance.available_sat
+    except Exception as e:
+        logger.warning("Failed to fetch balance: %s", e)
+
+    # 4. Record Metrics
+    row = MetricRow(
+        timestamp=int(datetime.now(UTC).timestamp()),
+        braiins_hashrate_phs=braiins_hashrate_phs,
+        ocean_hashrate_phs=ocean_hashrate_phs,
+        braiins_connected=braiins_connected,
+        ocean_connected=ocean_connected,
+        mempool_connected=mempool_connected,
+        target_hashrate_phs=target_hashrate_phs,
+        needed_hashrate_phs=needed_hashrate_phs,
+        market_price_sat=market_price_sat,
+        bids_active=bids_active,
+        bids_created=bids_created,
+        bids_edited=bids_edited,
+        bids_cancelled=bids_cancelled,
+        balance_sat=balance_sat,
+    )
+    await metrics_repo.insert(row)
+
+    # 5. Logging
+    logger.info(
+        "Tick complete: Target %s PH/s, Ocean actual %s PH/s. "
+        "Market Price %s sat. Actions: %d CREATE, %d EDIT, %d CANCEL. "
+        "Balance %s sat.",
+        f"{target_hashrate_phs:.2f}" if target_hashrate_phs is not None else "N/A",
+        f"{ocean_hashrate_phs:.2f}",
+        market_price_sat if market_price_sat is not None else "N/A",
+        bids_created,
+        bids_edited,
+        bids_cancelled,
+        f"{balance_sat}" if balance_sat is not None else "N/A",
+    )
+

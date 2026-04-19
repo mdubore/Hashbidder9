@@ -16,6 +16,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (config?.oceanAddress) {
     env.OCEAN_ADDRESS = config.oceanAddress
   }
+  if (config?.mempoolUrl) {
+    env.MEMPOOL_URL = config.mempoolUrl
+  }
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
     subcontainer: await sdk.SubContainer.of(
