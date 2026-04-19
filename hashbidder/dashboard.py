@@ -6,6 +6,7 @@ import logging
 import os
 import time
 import tomllib
+import traceback
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from pathlib import Path
@@ -126,18 +127,23 @@ def save_config_to_toml(data: dict[str, Any], path: Path) -> None:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     """Render main dashboard with metrics history."""
-    # Fetch last 30 days
-    thirty_days_ago = int(time.time()) - (30 * 24 * 60 * 60)
-    history = await repo.get_history(thirty_days_ago)
-    
-    # Extract current status (latest metric row)
-    current_status = history[-1] if history else None
-    
-    return templates.TemplateResponse(
-        request=request, 
-        name="index.html", 
-        context={"history": history, "current_status": current_status}
-    )
+    try:
+        # Fetch last 30 days
+        thirty_days_ago = int(time.time()) - (30 * 24 * 60 * 60)
+        history = await repo.get_history(thirty_days_ago)
+        
+        # Extract current status (latest metric row)
+        current_status = history[-1] if history else None
+        
+        return templates.TemplateResponse(
+            request=request, 
+            name="index.html", 
+            context={"history": history, "current_status": current_status}
+        )
+    except Exception as e:
+        logger.error("Error rendering dashboard: %s", e)
+        logger.error(traceback.format_exc())
+        return HTMLResponse(content=f"Internal Server Error: {e}", status_code=500)
 
 
 @app.get("/settings", response_class=HTMLResponse)
