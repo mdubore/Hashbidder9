@@ -20,12 +20,21 @@ export const configSpec = InputSpec.of({
     required: false,
     default: 'https://mempool.space',
   }),
+  reconciliationInterval: Value.number({
+    name: 'Reconciliation Interval (minutes)',
+    description: 'How often the daemon checks the market and updates bids. 1 minute is recommended for volatile markets.',
+    required: true,
+    default: 5,
+    range: '[1, 60]',
+    integral: true,
+  }),
 })
 
 export type Config = {
   braiinsApiKey?: string | null
   oceanAddress?: string | null
   mempoolUrl?: string | null
+  reconciliationInterval: number
 }
 
 import { z } from '@start9labs/start-sdk'
@@ -33,4 +42,5 @@ export const configSchema = z.object({
   braiinsApiKey: z.string().nullable().optional(),
   oceanAddress: z.string().nullable().optional(),
   mempoolUrl: z.string().nullable().optional(),
+  reconciliationInterval: z.number(),
 })
