@@ -26,6 +26,13 @@ class MetricRow:
     bids_edited: int | None = None
     bids_cancelled: int | None = None
     balance_sat: int | None = None
+    # Braiins Shares
+    braiins_shares_accepted: int | None = None
+    braiins_shares_rejected: int | None = None
+    # Ocean Rewards
+    ocean_shares_window: int | None = None
+    ocean_estimated_rewards_sat: int | None = None
+    ocean_next_block_earnings_sat: int | None = None
 
 
 class MetricsRepo:
@@ -59,9 +66,31 @@ class MetricsRepo:
                     bids_created INTEGER,
                     bids_edited INTEGER,
                     bids_cancelled INTEGER,
-                    balance_sat INTEGER
+                    balance_sat INTEGER,
+                    braiins_shares_accepted INTEGER,
+                    braiins_shares_rejected INTEGER,
+                    ocean_shares_window INTEGER,
+                    ocean_estimated_rewards_sat INTEGER,
+                    ocean_next_block_earnings_sat INTEGER
                 )
             """)
+
+            # Safely add new columns if they don't exist
+            columns = [
+                ("braiins_shares_accepted", "INTEGER"),
+                ("braiins_shares_rejected", "INTEGER"),
+                ("ocean_shares_window", "INTEGER"),
+                ("ocean_estimated_rewards_sat", "INTEGER"),
+                ("ocean_next_block_earnings_sat", "INTEGER"),
+            ]
+            for col_name, col_type in columns:
+                try:
+                    await db.execute(
+                        f"ALTER TABLE metrics ADD COLUMN {col_name} {col_type}"
+                    )
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+
             await db.commit()
 
     async def insert(self, row: MetricRow) -> None:
@@ -72,7 +101,7 @@ class MetricsRepo:
         """
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     row.timestamp,
                     str(row.braiins_hashrate_phs),
@@ -92,6 +121,11 @@ class MetricsRepo:
                     row.bids_edited,
                     row.bids_cancelled,
                     row.balance_sat,
+                    row.braiins_shares_accepted,
+                    row.braiins_shares_rejected,
+                    row.ocean_shares_window,
+                    row.ocean_estimated_rewards_sat,
+                    row.ocean_next_block_earnings_sat,
                 ),
             )
             await db.commit()
@@ -132,6 +166,11 @@ class MetricsRepo:
                     bids_edited=r["bids_edited"],
                     bids_cancelled=r["bids_cancelled"],
                     balance_sat=r["balance_sat"],
+                    braiins_shares_accepted=r["braiins_shares_accepted"],
+                    braiins_shares_rejected=r["braiins_shares_rejected"],
+                    ocean_shares_window=r["ocean_shares_window"],
+                    ocean_estimated_rewards_sat=r["ocean_estimated_rewards_sat"],
+                    ocean_next_block_earnings_sat=r["ocean_next_block_earnings_sat"],
                 )
                 for r in rows
             ]
