@@ -1,6 +1,6 @@
 {
   "name": "hashbidder-startos",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "StartOS service package for Hashbidder",
   "main": "javascript/index.js",
   "scripts": {
