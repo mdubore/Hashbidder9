@@ -159,6 +159,7 @@ class HashpowerClient(Protocol):
 def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     bid = item["bid"]
     state = item.get("state_estimate")
+    counters = item.get("counters")
     upstream = bid.get("dest_upstream")
     return UserBid(
         id=BidId(bid["id"]),
@@ -183,6 +184,12 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
             identity=upstream["identity"],
         )
         if upstream is not None
+        else None,
+        shares_accepted=int(counters["accepted_shares"])
+        if counters is not None and "accepted_shares" in counters
+        else None,
+        shares_rejected=int(counters["rejected_shares"])
+        if counters is not None and "rejected_shares" in counters
         else None,
     )
 

@@ -100,12 +100,12 @@ async def _tick(
                 dry_run=False,
             )
             set_bids_result = res.set_bids_result
-            target_hashrate_phs = (
-                res.inputs.target.to(HashUnit.PH, TimeUnit.SECOND).value
-            )
-            needed_hashrate_phs = (
-                res.inputs.needed.to(HashUnit.PH, TimeUnit.SECOND).value
-            )
+            target_hashrate_phs = res.inputs.target.to(
+                HashUnit.PH, TimeUnit.SECOND
+            ).value
+            needed_hashrate_phs = res.inputs.needed.to(
+                HashUnit.PH, TimeUnit.SECOND
+            ).value
             market_price_sat = int(res.inputs.price.to(HashUnit.PH, TimeUnit.DAY).sats)
             ocean_connected = True
         else:
@@ -131,23 +131,35 @@ async def _tick(
     # 3. Final Metrics Collection
     braiins_hashrate_phs = Decimal(0)
     bids_active = 0
+    braiins_shares_accepted = 0
+    braiins_shares_rejected = 0
     try:
         current_bids = await braiins_client.get_current_bids()
         bids_active = len(current_bids)
         for bid in current_bids:
             braiins_hashrate_phs += bid.speed_limit_ph.value
+            if bid.shares_accepted is not None:
+                braiins_shares_accepted += bid.shares_accepted
+            if bid.shares_rejected is not None:
+                braiins_shares_rejected += bid.shares_rejected
         braiins_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Braiins metrics: %s", e)
 
     ocean_hashrate_phs = Decimal(0)
+    ocean_shares_window = None
+    ocean_estimated_rewards_sat = None
+    ocean_next_block_earnings_sat = None
     try:
         stats = await ocean_client.get_account_stats(ocean_address)
+        ocean_shares_window = stats.shares_window
+        ocean_estimated_rewards_sat = stats.estimated_rewards
+        ocean_next_block_earnings_sat = stats.next_block_earnings
         for window in stats.windows:
             if window.window is OceanTimeWindow.DAY:
-                ocean_hashrate_phs = (
-                    window.hashrate.to(HashUnit.PH, TimeUnit.SECOND).value
-                )
+                ocean_hashrate_phs = window.hashrate.to(
+                    HashUnit.PH, TimeUnit.SECOND
+                ).value
                 break
         ocean_connected = True
     except Exception as e:
@@ -182,6 +194,11 @@ async def _tick(
         bids_edited=bids_edited,
         bids_cancelled=bids_cancelled,
         balance_sat=balance_sat,
+        braiins_shares_accepted=braiins_shares_accepted,
+        braiins_shares_rejected=braiins_shares_rejected,
+        ocean_shares_window=ocean_shares_window,
+        ocean_estimated_rewards_sat=ocean_estimated_rewards_sat,
+        ocean_next_block_earnings_sat=ocean_next_block_earnings_sat,
     )
     await metrics_repo.insert(row)
 
@@ -198,4 +215,3 @@ async def _tick(
         bids_cancelled,
         f"{balance_sat}" if balance_sat is not None else "N/A",
     )
-

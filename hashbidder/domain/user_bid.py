@@ -39,3 +39,5 @@ class UserBid:
     amount_remaining_sat: Sats | None
     last_updated: datetime
     upstream: Upstream | None
+    shares_accepted: int | None = None
+    shares_rejected: int | None = None
