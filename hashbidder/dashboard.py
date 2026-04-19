@@ -72,6 +72,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         mempool_client = MempoolClient(_resolve_mempool_url(), http_client)
         ocean_client = OceanClient(DEFAULT_OCEAN_URL, http_client)
 
+        interval_seconds = int(os.environ.get("HASHBIDDER_INTERVAL_SECONDS", "300"))
+
         daemon_task = asyncio.create_task(
             daemon_loop(
                 config_path=BIDS_CONFIG_PATH,
@@ -80,6 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 mempool_client=mempool_client,
                 metrics_repo=repo,
                 ocean_address=ocean_address,
+                interval_seconds=interval_seconds,
             )
         )
 
