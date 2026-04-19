@@ -131,14 +131,14 @@ async def index(request: Request) -> HTMLResponse:
         # Fetch last 30 days
         thirty_days_ago = int(time.time()) - (30 * 24 * 60 * 60)
         history = await repo.get_history(thirty_days_ago)
-        
+
         # Extract current status (latest metric row)
         current_status = history[-1] if history else None
-        
+
         return templates.TemplateResponse(
-            request=request, 
-            name="index.html", 
-            context={"history": history, "current_status": current_status}
+            request=request,
+            name="index.html",
+            context={"history": history, "current_status": current_status},
         )
     except Exception as e:
         logger.error("Error rendering dashboard: %s", e)
@@ -188,9 +188,7 @@ async def post_settings(
             data["target_hashrate_ph_s"] = (
                 Decimal(target_hashrate_ph_s) if target_hashrate_ph_s else None
             )
-            data["max_bids_count"] = (
-                int(max_bids_count) if max_bids_count else None
-            )
+            data["max_bids_count"] = int(max_bids_count) if max_bids_count else None
             TargetHashrateModel.model_validate(data)
         else:
             # For now, explicit-bids with no bids from form
