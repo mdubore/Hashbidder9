@@ -1,4 +1,4 @@
-"""Tests for OceanClient HTTP parsing and error handling."""
+"""Tests for OceanClient JSON parsing and error handling."""
 
 from decimal import Decimal
 
@@ -10,38 +10,19 @@ from hashbidder.domain.hashrate import HashUnit
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.ocean_client import OceanClient, OceanError, OceanTimeWindow
 
-_VALID_HTML = """\
-<tr class="table-row">
-  <td class="table-cell">24 hrs</td>
-  <td class="table-cell">1885.8 Th/s</td>
-  <td class="table-cell">123 shares</td>
-</tr>
-<tr class="table-row">
-  <td class="table-cell">3 hrs</td>
-  <td class="table-cell">1850.0 Th/s</td>
-  <td class="table-cell">45 shares</td>
-</tr>
-<tr class="table-row">
-  <td class="table-cell">10 min</td>
-  <td class="table-cell">3.22 Th/s</td>
-  <td class="table-cell">5 shares</td>
-</tr>
-<tr class="table-row">
-  <td class="table-cell">5 min</td>
-  <td class="table-cell">3.02 Th/s</td>
-  <td class="table-cell">3 shares</td>
-</tr>
-<tr class="table-row">
-  <td class="table-cell">60 sec</td>
-  <td class="table-cell">3.00 Th/s</td>
-  <td class="table-cell">1 shares</td>
-</tr>
-"""
+_VALID_JSON = {
+    "hashrate_24h": 1885800000000000,
+    "hashrate_3h": 1850000000000000,
+    "hashrate_1h": 1800000000000000,
+    "shares_window": 123,
+    "estimated_rewards": 456,
+    "next_block_earnings": 789,
+}
 
 
 def _make_client(handler: httpx.MockTransport) -> OceanClient:
     return OceanClient(
-        base_url=httpx.URL("https://ocean.example.com"),
+        base_url=httpx.URL("https://api.example.com/"),
         http_client=httpx.AsyncClient(transport=handler),
     )
 
@@ -51,91 +32,54 @@ class TestGetAccountStats:
 
     @pytest.mark.asyncio
     async def test_happy_path(self) -> None:
-        """Valid HTML fragment is parsed into correct AccountStats."""
+        """Valid JSON response is parsed into correct AccountStats."""
+        address_str = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
 
         def handler(request: httpx.Request) -> httpx.Response:
-            assert "user=" in str(request.url)
-            return httpx.Response(200, text=_VALID_HTML)
+            assert address_str in str(request.url)
+            return httpx.Response(200, json=_VALID_JSON)
 
         client = _make_client(httpx.MockTransport(handler))
-        stats = await client.get_account_stats(
-            BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-        )
+        stats = await client.get_account_stats(BtcAddress(address_str))
 
-        assert len(stats.windows) == 5
+        assert len(stats.windows) == 3
         assert stats.windows[0].window == OceanTimeWindow.DAY
-        assert stats.windows[0].hashrate.value == Decimal("1885.8")
-        assert stats.windows[0].hashrate.hash_unit == HashUnit.TH
+        assert stats.windows[0].hashrate.value == Decimal("1885800000000000")
+        assert stats.windows[0].hashrate.hash_unit == HashUnit.H
         assert stats.windows[0].hashrate.time_unit == TimeUnit.SECOND
-        assert stats.windows[4].window == OceanTimeWindow.SIXTY_SECONDS
-        assert stats.windows[4].hashrate.value == Decimal("3.00")
+
+        assert stats.windows[1].window == OceanTimeWindow.THREE_HOURS
+        assert stats.windows[2].window == OceanTimeWindow.ONE_HOUR
+
+        assert stats.shares_window == 123
+        assert stats.estimated_rewards == 456
+        assert stats.next_block_earnings == 789
 
     @pytest.mark.asyncio
-    async def test_wrong_number_of_rows(self) -> None:
-        """Fewer than 5 rows raises OceanError."""
-        html = (
-            '<tr class="table-row">'
-            '<td class="table-cell">24 hrs</td>'
-            '<td class="table-cell">0.00 Th/s</td>'
-            '<td class="table-cell">0</td>'
-            "</tr>"
-        )
+    async def test_invalid_json(self) -> None:
+        """Invalid JSON raises OceanError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text=html)
+            return httpx.Response(200, text="not json")
 
         client = _make_client(httpx.MockTransport(handler))
-        with pytest.raises(OceanError, match="expected 5 rows"):
+        with pytest.raises(OceanError, match="invalid JSON response"):
             await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
 
     @pytest.mark.asyncio
-    async def test_unexpected_period_label(self) -> None:
-        """Wrong period label raises OceanError."""
-        html = _VALID_HTML.replace("24 hrs", "48 hrs")
+    async def test_not_an_object(self) -> None:
+        """JSON that isn't a dict raises OceanError."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text=html)
+            return httpx.Response(200, json=[1, 2, 3])
 
         client = _make_client(httpx.MockTransport(handler))
-        with pytest.raises(OceanError, match="expected period"):
+        with pytest.raises(OceanError, match="expected JSON object"):
             await client.get_account_stats(
                 BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
             )
-
-    @pytest.mark.asyncio
-    async def test_unrecognized_unit(self) -> None:
-        """Unknown hashrate unit raises OceanError."""
-        html = _VALID_HTML.replace("1885.8 Th/s", "1885.8 Xh/s")
-
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text=html)
-
-        client = _make_client(httpx.MockTransport(handler))
-        with pytest.raises(OceanError, match="unrecognized hashrate unit"):
-            await client.get_account_stats(
-                BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-            )
-
-    @pytest.mark.asyncio
-    async def test_messy_whitespace_in_cells(self) -> None:
-        """Extra whitespace and newlines inside cells are handled."""
-        messy = _VALID_HTML.replace(
-            '<td class="table-cell">1885.8 Th/s</td>',
-            '<td class="table-cell">\n  1885.8  Th/s\n</td>',
-        )
-
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text=messy)
-
-        client = _make_client(httpx.MockTransport(handler))
-        stats = await client.get_account_stats(
-            BtcAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-        )
-
-        assert stats.windows[0].hashrate.value == Decimal("1885.8")
-        assert stats.windows[0].hashrate.hash_unit == HashUnit.TH
 
     @pytest.mark.asyncio
     async def test_http_error(self) -> None:

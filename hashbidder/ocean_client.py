@@ -1,10 +1,9 @@
 """Ocean.xyz API client for account hashrate stats."""
 
-import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -13,7 +12,7 @@ from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import Hashrate, HashUnit
 from hashbidder.domain.time_unit import TimeUnit
 
-DEFAULT_OCEAN_URL = httpx.URL("https://ocean.xyz")
+DEFAULT_OCEAN_URL = httpx.URL("https://api.ocean.xyz/v1/user_hashrate/")
 
 
 class OceanTimeWindow(Enum):
@@ -21,13 +20,10 @@ class OceanTimeWindow(Enum):
 
     DAY = "24 hrs"
     THREE_HOURS = "3 hrs"
+    ONE_HOUR = "1 hr"
     TEN_MINUTES = "10 min"
     FIVE_MINUTES = "5 min"
     SIXTY_SECONDS = "60 sec"
-
-
-_ROW_RE = re.compile(r'<tr\s+class="table-row">(.*?)</tr>', re.DOTALL)
-_CELL_RE = re.compile(r'<td\s+class="table-cell"\s*>(.*?)</td>', re.DOTALL)
 
 
 class OceanError(Exception):
@@ -71,6 +67,9 @@ class AccountStats:
     """Hashrate stats for an Ocean account across all time windows."""
 
     windows: tuple[HashrateWindow, ...]
+    shares_window: int | None = None
+    estimated_rewards: int | None = None
+    next_block_earnings: int | None = None
 
 
 class OceanSource(Protocol):
@@ -81,58 +80,39 @@ class OceanSource(Protocol):
         ...
 
 
-def _parse_hashrate(text: str) -> Hashrate:
-    """Parse a hashrate string like '1885.8 Th/s' into a Hashrate."""
-    parts = text.strip().split()
-    if len(parts) != 2:
-        raise OceanError(200, f"unexpected hashrate format: {text!r}")
-    value_str, unit_str = parts
-    try:
-        value = Decimal(value_str)
-    except InvalidOperation as e:
-        raise OceanError(200, f"invalid hashrate value: {value_str!r}") from e
-    try:
-        hash_unit = HashUnit.from_rate_str(unit_str)
-    except ValueError as e:
-        raise OceanError(200, f"unrecognized hashrate unit: {unit_str!r}") from e
-    return Hashrate(value=value, hash_unit=hash_unit, time_unit=TimeUnit.SECOND)
-
-
-def _parse_html(html: str) -> AccountStats:
-    """Parse the Ocean hashrate rows HTML fragment into AccountStats."""
-    rows = _ROW_RE.findall(html)
-    if len(rows) != 5:
-        raise OceanError(
-            200,
-            f"expected 5 rows, got {len(rows)}; response schema may have changed",
-        )
-
-    expected_windows = tuple(OceanTimeWindow)
+def _parse_json(data: dict[str, Any]) -> AccountStats:
+    """Parse the Ocean hashrate JSON response into AccountStats."""
     windows: list[HashrateWindow] = []
-    for i, row_html in enumerate(rows):
-        cells = [c.strip() for c in _CELL_RE.findall(row_html)]
-        if len(cells) != 3:
-            raise OceanError(
-                200,
-                f"row {i}: expected 3 cells, got {len(cells)}",
-            )
-        label = cells[0]
-        expected = expected_windows[i]
-        if label != expected.value:
-            raise OceanError(
-                200,
-                f"row {i}: expected period {expected.value!r}, got {label!r}",
-            )
-        hashrate = _parse_hashrate(cells[1])
-        windows.append(HashrateWindow(window=expected, hashrate=hashrate))
 
-    return AccountStats(windows=tuple(windows))
+    # Map API keys to internal enum members.
+    mapping = {
+        "hashrate_24h": OceanTimeWindow.DAY,
+        "hashrate_3h": OceanTimeWindow.THREE_HOURS,
+        "hashrate_1h": OceanTimeWindow.ONE_HOUR,
+        "hashrate_5m": OceanTimeWindow.FIVE_MINUTES,
+    }
+
+    for key, window_enum in mapping.items():
+        if key in data:
+            val = data[key]
+            # API returns raw H/s as integers or floats
+            hashrate = Hashrate(
+                value=Decimal(str(val)),
+                hash_unit=HashUnit.H,
+                time_unit=TimeUnit.SECOND,
+            )
+            windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
+
+    return AccountStats(
+        windows=tuple(windows),
+        shares_window=data.get("shares_window"),
+        estimated_rewards=data.get("estimated_rewards"),
+        next_block_earnings=data.get("next_block_earnings"),
+    )
 
 
 class OceanClient:
     """HTTP client for Ocean.xyz hashrate stats."""
-
-    _HASHRATE_ROWS_PATH = "/template/workers/hashrates/rows"
 
     def __init__(self, base_url: httpx.URL, http_client: httpx.AsyncClient) -> None:
         """Initialize the client.
@@ -151,11 +131,19 @@ class OceanClient:
         Raises:
             OceanError: On HTTP errors or unexpected response schema.
         """
-        url = f"{self._base_url}{self._HASHRATE_ROWS_PATH}"
-        resp = await self._http.get(url, params={"user": address.value})
+        url = f"{self._base_url}{address.value}"
+        resp = await self._http.get(url)
         if not resp.is_success:
             raise OceanError(
                 resp.status_code,
                 resp.text or resp.reason_phrase or "Unknown error",
             )
-        return _parse_html(resp.text)
+        try:
+            data = resp.json()
+        except ValueError as e:
+            raise OceanError(200, f"invalid JSON response: {e}") from e
+
+        if not isinstance(data, dict):
+            raise OceanError(200, f"expected JSON object, got {type(data).__name__}")
+
+        return _parse_json(data)
