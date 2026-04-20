@@ -90,21 +90,30 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
 
     # Map API keys to internal enum members.
     mapping = {
+        "24h": OceanTimeWindow.DAY,
+        "3h": OceanTimeWindow.THREE_HOURS,
+        "1h": OceanTimeWindow.ONE_HOUR,
+        "15m": OceanTimeWindow.TEN_MINUTES,
+        "5m": OceanTimeWindow.FIVE_MINUTES,
         "hashrate_24h": OceanTimeWindow.DAY,
         "hashrate_3h": OceanTimeWindow.THREE_HOURS,
         "hashrate_1h": OceanTimeWindow.ONE_HOUR,
-        "hashrate_15m": OceanTimeWindow.TEN_MINUTES,
-        "hashrate_5m": OceanTimeWindow.FIVE_MINUTES,
+        "hashrate_day": OceanTimeWindow.DAY,
     }
 
-    # Some versions of the API use hashrate_day instead of hashrate_24h
-    if "hashrate_day" in data and "hashrate_24h" not in data:
-        data["hashrate_24h"] = data["hashrate_day"]
+    # Search for stats in the response
+    stats_source = data
+    if "data" in data and isinstance(data["data"], dict):
+        stats_source = data["data"]
+
+    # Check for nested hashrate object
+    hr_source = stats_source
+    if "hashrate" in stats_source and isinstance(stats_source["hashrate"], dict):
+        hr_source = stats_source["hashrate"]
 
     for key, window_enum in mapping.items():
-        val = data.get(key)
+        val = hr_source.get(key)
         if val is not None:
-            # Handle both raw numbers and nested objects {"value": 1.2, ...}
             if isinstance(val, dict):
                 raw_val = val.get("value") or val.get("hashrate") or 0
             else:
@@ -117,25 +126,41 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
             )
             windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
 
-    # Also handle nested objects if present
-    if "hashrates" in data and isinstance(data["hashrates"], dict):
-        for key, val in data["hashrates"].items():
-            if key in mapping:
-                hashrate = Hashrate(
-                    value=Decimal(str(val)),
-                    hash_unit=HashUnit.H,
-                    time_unit=TimeUnit.SECOND,
-                )
-                windows.append(HashrateWindow(window=mapping[key], hashrate=hashrate))
+    # Fallback: if no windows found, try the top level again with hashrate_ prefix
+    if not windows:
+        for key, window_enum in mapping.items():
+            if not key.startswith("hashrate_"):
+                alt_key = f"hashrate_{key}"
+                val = stats_source.get(alt_key)
+                if val is not None:
+                    hashrate = Hashrate(
+                        value=Decimal(str(val)),
+                        hash_unit=HashUnit.H,
+                        time_unit=TimeUnit.SECOND,
+                    )
+                    windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
+
+    # Extract rewards/shares
+    rewards_source = stats_source
+    if "rewards" in stats_source and isinstance(stats_source["rewards"], dict):
+        rewards_source = stats_source["rewards"]
+
+    shares_source = stats_source
+    if "shares" in stats_source and isinstance(stats_source["shares"], dict):
+        shares_source = stats_source["shares"]
 
     return AccountStats(
         windows=tuple(windows),
-        shares_window=data.get("shares_in_window") or data.get("shares_window"),
-        estimated_rewards=data.get("estimated_rewards_in_window")
-        or data.get("estimated_rewards"),
-        next_block_earnings=data.get("estimated_earnings_next_block")
-        or data.get("next_block_earnings")
-        or data.get("estimated_earnings"),
+        shares_window=shares_source.get("window")
+        or stats_source.get("shares_in_window")
+        or stats_source.get("shares_window"),
+        estimated_rewards=rewards_source.get("estimated_rewards_in_window")
+        or rewards_source.get("estimated_rewards")
+        or stats_source.get("estimated_rewards"),
+        next_block_earnings=rewards_source.get("estimated_next_block")
+        or rewards_source.get("estimated_earnings_next_block")
+        or stats_source.get("next_block_earnings")
+        or stats_source.get("estimated_earnings"),
     )
 
 

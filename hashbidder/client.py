@@ -21,7 +21,7 @@ from hashbidder.domain.user_bid import BidId, BidStatus, ClOrderId, UserBid
 
 logger = logging.getLogger(__name__)
 
-API_BASE = httpx.URL("https://hashpower.braiins.com/api/v1")
+API_BASE = httpx.URL("https://hashpower.braiins.com/v1")
 
 __all__ = [
     "API_BASE",
@@ -386,7 +386,7 @@ class BraiinsClient:
         """Build the required authentication headers."""
         if not self._api_key:
             return {}
-        return {"X-Api-Key": self._api_key}
+        return {"apikey": self._api_key}
 
     def _raise_api_error(self, response: httpx.Response) -> None:
         """Parse error message from response and raise ApiError."""
