@@ -127,6 +127,12 @@ async def _tick(
                         bids_cancelled += 1
     except Exception as e:
         logger.error("Reconciliation failed: %s", e)
+        # Try to log the raw stats to help debug "missing window" issues
+        try:
+            raw_stats = await ocean_client.get_account_stats(ocean_address)
+            logger.debug("Ocean stats for debug: %s", raw_stats)
+        except Exception:
+            pass
 
     # 3. Final Metrics Collection
     braiins_hashrate_phs = Decimal(0)

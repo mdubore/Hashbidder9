@@ -386,7 +386,7 @@ class BraiinsClient:
         """Build the required authentication headers."""
         if not self._api_key:
             return {}
-        return {"apikey": self._api_key}
+        return {"X-Api-Key": self._api_key}
 
     def _raise_api_error(self, response: httpx.Response) -> None:
         """Parse error message from response and raise ApiError."""

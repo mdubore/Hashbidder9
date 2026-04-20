@@ -1,5 +1,6 @@
 """Ocean.xyz API client for account hashrate stats."""
 
+import logging
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -11,6 +12,8 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.domain.hashrate import Hashrate, HashUnit
 from hashbidder.domain.time_unit import TimeUnit
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_OCEAN_URL = httpx.URL("https://api.ocean.xyz/v1/user_hashrate/")
 
@@ -82,6 +85,7 @@ class OceanSource(Protocol):
 
 def _parse_json(data: dict[str, Any]) -> AccountStats:
     """Parse the Ocean hashrate JSON response into AccountStats."""
+    logger.debug("Parsing Ocean JSON: %s", data)
     windows: list[HashrateWindow] = []
 
     # Map API keys to internal enum members.
@@ -89,19 +93,40 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
         "hashrate_24h": OceanTimeWindow.DAY,
         "hashrate_3h": OceanTimeWindow.THREE_HOURS,
         "hashrate_1h": OceanTimeWindow.ONE_HOUR,
+        "hashrate_15m": OceanTimeWindow.TEN_MINUTES,
         "hashrate_5m": OceanTimeWindow.FIVE_MINUTES,
     }
 
+    # Some versions of the API use hashrate_day instead of hashrate_24h
+    if "hashrate_day" in data and "hashrate_24h" not in data:
+        data["hashrate_24h"] = data["hashrate_day"]
+
     for key, window_enum in mapping.items():
-        if key in data:
-            val = data[key]
-            # API returns raw H/s as integers or floats
+        val = data.get(key)
+        if val is not None:
+            # Handle both raw numbers and nested objects {"value": 1.2, ...}
+            if isinstance(val, dict):
+                raw_val = val.get("value") or val.get("hashrate") or 0
+            else:
+                raw_val = val
+
             hashrate = Hashrate(
-                value=Decimal(str(val)),
+                value=Decimal(str(raw_val)),
                 hash_unit=HashUnit.H,
                 time_unit=TimeUnit.SECOND,
             )
             windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
+
+    # Also handle nested objects if present
+    if "hashrates" in data and isinstance(data["hashrates"], dict):
+        for key, val in data["hashrates"].items():
+            if key in mapping:
+                hashrate = Hashrate(
+                    value=Decimal(str(val)),
+                    hash_unit=HashUnit.H,
+                    time_unit=TimeUnit.SECOND,
+                )
+                windows.append(HashrateWindow(window=mapping[key], hashrate=hashrate))
 
     return AccountStats(
         windows=tuple(windows),
