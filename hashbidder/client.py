@@ -5,21 +5,41 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
+from urllib.parse import unquote
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
+from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.progress import Progress
 from hashbidder.domain.sats import Sats
 from hashbidder.domain.stratum_url import StratumUrl
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.domain.upstream import Upstream
-from hashbidder.domain.user_bid import BidId, BidStatus, UserBid
+from hashbidder.domain.user_bid import BidId, BidStatus, ClOrderId, UserBid
 
 logger = logging.getLogger(__name__)
 
 API_BASE = httpx.URL("https://hashpower.braiins.com/api/v1")
+
+__all__ = [
+    "API_BASE",
+    "AccountBalance",
+    "ApiError",
+    "AskItem",
+    "BidId",
+    "BidItem",
+    "BidStatus",
+    "BraiinsClient",
+    "ClOrderId",
+    "CreateBidResult",
+    "HashpowerClient",
+    "MarketSettings",
+    "OrderBook",
+    "Upstream",
+    "UserBid",
+]
 
 
 class ApiError(Exception):
@@ -43,6 +63,8 @@ class BidItem:
 
     price: HashratePrice
     hr_matched_ph: Hashrate
+    amount_sat: Sats
+    speed_limit_ph: Hashrate
 
 
 @dataclass(frozen=True)
@@ -51,6 +73,7 @@ class AskItem:
 
     price: HashratePrice
     hr_matched_ph: Hashrate
+    hr_available_ph: Hashrate
 
 
 @dataclass(frozen=True)
@@ -65,9 +88,19 @@ class OrderBook:
 class MarketSettings:
     """Global parameters for the spot market."""
 
-    price_tick: Sats
-    speed_cooldown_period: timedelta
-    price_cooldown_period: timedelta
+    price_tick: PriceTick
+    min_bid_price_decrease_period: timedelta
+    min_bid_speed_limit_decrease_period: timedelta
+
+    @property
+    def speed_cooldown_period(self) -> timedelta:
+        """Alias for min_bid_speed_limit_decrease_period."""
+        return self.min_bid_speed_limit_decrease_period
+
+    @property
+    def price_cooldown_period(self) -> timedelta:
+        """Alias for min_bid_price_decrease_period."""
+        return self.min_bid_price_decrease_period
 
 
 @dataclass(frozen=True)
@@ -76,6 +109,14 @@ class AccountBalance:
 
     available_sat: Sats
     total_sat: Sats
+    blocked_sat: Sats
+
+
+@dataclass(frozen=True)
+class CreateBidResult:
+    """The result of a successful create bid request."""
+
+    id: BidId
 
 
 class HashpowerClient(Protocol):
@@ -97,9 +138,10 @@ class HashpowerClient(Protocol):
         self,
         price: HashratePrice,
         speed_limit: Hashrate,
-        amount: Sats,
+        amount_sat: Sats,
         upstream: Upstream,
-    ) -> BidId:
+        cl_order_id: ClOrderId,
+    ) -> CreateBidResult:
         """Place a new spot bid."""
         ...
 
@@ -127,7 +169,6 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     counters = item.get("counters")
     upstream = bid.get("dest_upstream")
 
-    # Current speed and delivered hashrate are typically in H/s as integers
     def parse_hr(val: Any) -> Hashrate | None:
         if val is None:
             return None
@@ -178,7 +219,6 @@ def _is_transient_braiins_error(e: BaseException) -> bool:
     return False
 
 
-# Define a decorator for reuse
 braiins_retry = retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -218,6 +258,12 @@ class BraiinsClient:
                     hr_matched_ph=Hashrate(
                         Decimal(item["hr_matched_ph"]), HashUnit.PH, TimeUnit.SECOND
                     ),
+                    amount_sat=Sats(int(item.get("amount_sat", 0))),
+                    speed_limit_ph=Hashrate(
+                        Decimal(item.get("speed_limit_ph", 0)),
+                        HashUnit.PH,
+                        TimeUnit.SECOND,
+                    ),
                 )
                 for item in data["bids"]
             ),
@@ -230,6 +276,11 @@ class BraiinsClient:
                     hr_matched_ph=Hashrate(
                         Decimal(item["hr_matched_ph"]), HashUnit.PH, TimeUnit.SECOND
                     ),
+                    hr_available_ph=Hashrate(
+                        Decimal(item.get("hr_available_ph", 0)),
+                        HashUnit.PH,
+                        TimeUnit.SECOND,
+                    ),
                 )
                 for item in data["asks"]
             ),
@@ -240,36 +291,42 @@ class BraiinsClient:
         """Fetch global market parameters."""
         data = await self._request("GET", "/spot/settings")
         return MarketSettings(
-            price_tick=Sats(int(data["price_tick_sat"])),
-            speed_cooldown_period=timedelta(seconds=int(data["speed_edit_cooldown_s"])),
-            price_cooldown_period=timedelta(seconds=int(data["price_edit_cooldown_s"])),
+            price_tick=PriceTick(sats=Sats(int(data["tick_size_sat"]))),
+            min_bid_price_decrease_period=timedelta(
+                seconds=int(data["min_bid_price_decrease_period_s"])
+            ),
+            min_bid_speed_limit_decrease_period=timedelta(
+                seconds=int(data["min_bid_speed_limit_decrease_period_s"])
+            ),
         )
 
     @braiins_retry
     async def get_current_bids(self) -> tuple[UserBid, ...]:
         """Fetch the current user's active bids."""
         data = await self._request("GET", "/spot/bid/current")
-        return tuple(_parse_user_bid(item) for item in data)
+        return tuple(_parse_user_bid(item) for item in data["items"])
 
     async def create_bid(
         self,
         price: HashratePrice,
         speed_limit: Hashrate,
-        amount: Sats,
+        amount_sat: Sats,
         upstream: Upstream,
-    ) -> BidId:
+        cl_order_id: ClOrderId,
+    ) -> CreateBidResult:
         """Place a new spot bid."""
         body = {
+            "cl_order_id": str(cl_order_id),
             "price_sat": int(price.to(HashUnit.EH, TimeUnit.DAY).sats),
             "speed_limit_ph": float(speed_limit.to(HashUnit.PH, TimeUnit.SECOND).value),
-            "amount_sat": int(amount),
+            "amount_sat": int(amount_sat),
             "dest_upstream": {
                 "url": str(upstream.url),
                 "identity": upstream.identity,
             },
         }
         data = await self._request("POST", "/spot/bid/create", body=body)
-        return BidId(data["id"])
+        return CreateBidResult(id=BidId(data["id"]))
 
     async def edit_bid(
         self,
@@ -279,31 +336,34 @@ class BraiinsClient:
     ) -> None:
         """Update an existing bid."""
         body = {
-            "id": str(id),
-            "price_sat": int(new_price.to(HashUnit.EH, TimeUnit.DAY).sats),
-            "speed_limit_ph": float(
-                new_speed_limit.to(HashUnit.PH, TimeUnit.SECOND).value
-            ),
+            "bid_id": str(id),
+            "new_price_sat": int(new_price.to(HashUnit.EH, TimeUnit.DAY).sats),
+            "new_speed_limit_ph": {
+                "value": float(new_speed_limit.to(HashUnit.PH, TimeUnit.SECOND).value)
+            },
         }
-        await self._request("POST", "/spot/bid/edit", body=body)
+        await self._request("PUT", "/spot/bid", body=body)
 
     async def cancel_bid(self, id: BidId) -> None:
         """Cancel an existing bid."""
-        body = {"id": str(id)}
-        await self._request("POST", "/spot/bid/cancel", body=body)
+        body = {"order_id": str(id)}
+        await self._request("DELETE", "/spot/bid", body=body)
 
     @braiins_retry
     async def get_account_balance(self) -> AccountBalance:
         """Fetch the authenticated account's balance."""
         data = await self._request("GET", "/account/balance")
-        # The API returns a list of balances by asset; we assume BTC for now.
-        for bal in data:
-            if bal["asset"] == "BTC":
-                return AccountBalance(
-                    available_sat=Sats(int(bal["available_sat"])),
-                    total_sat=Sats(int(bal["total_sat"])),
-                )
-        raise ApiError(200, "BTC balance not found in account response")
+        accounts = data["accounts"]
+        if len(accounts) != 1:
+            raise ValueError(
+                f"expected exactly one account in balance response, got {len(accounts)}"
+            )
+        account = accounts[0]
+        return AccountBalance(
+            available_sat=Sats(int(account["available_balance_sat"])),
+            total_sat=Sats(int(account["total_balance_sat"])),
+            blocked_sat=Sats(int(account["blocked_balance_sat"])),
+        )
 
     async def _request(
         self, method: str, path: str, body: dict[str, Any] | None = None
@@ -317,7 +377,6 @@ class BraiinsClient:
         if not response.is_success:
             self._raise_api_error(response)
 
-        # Some endpoints return empty body on success
         if not response.text:
             return None
 
@@ -327,16 +386,18 @@ class BraiinsClient:
         """Build the required authentication headers."""
         if not self._api_key:
             return {}
-        return {"X-Api-Key": self._api_key}
+        return {"apikey": self._api_key}
 
     def _raise_api_error(self, response: httpx.Response) -> None:
         """Parse error message from response and raise ApiError."""
-        try:
-            data = response.json()
-            # The API often returns errors in a "message" field or nested.
-            message = data.get("message") or response.text
-        except ValueError:
-            # Fallback to gRPC header if present (Braiins API style)
-            message = response.headers.get("grpc-message") or response.text
+        grpc_msg = response.headers.get("grpc-message")
+        if grpc_msg:
+            message = unquote(grpc_msg)
+        else:
+            try:
+                data = response.json()
+                message = data.get("message") or response.text
+            except ValueError:
+                message = response.text
 
         raise ApiError(response.status_code, message)

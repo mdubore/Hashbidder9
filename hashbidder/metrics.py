@@ -99,7 +99,10 @@ class MetricsRepo:
             row: The MetricRow to insert.
         """
         async with aiosqlite.connect(self.db_path) as db:
-            query = "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            query = (
+                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?, ?, ?, ?)"
+            )
             await db.execute(
                 query,
                 (

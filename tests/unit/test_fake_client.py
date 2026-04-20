@@ -63,7 +63,7 @@ class TestFakeClientCreate:
         cfg = make_bid_config(500, "5.0")
 
         result = await client.create_bid(
-            UPSTREAM, Sats(100_000), cfg.price, cfg.speed_limit, ClOrderId("cl-1")
+            cfg.price, cfg.speed_limit, Sats(100_000), UPSTREAM, ClOrderId("cl-1")
         )
 
         assert result.id.startswith("B")
@@ -78,10 +78,10 @@ class TestFakeClientCreate:
         cfg = make_bid_config(500, "5.0")
 
         r1 = await client.create_bid(
-            UPSTREAM, Sats(100_000), cfg.price, cfg.speed_limit, ClOrderId("a")
+            cfg.price, cfg.speed_limit, Sats(100_000), UPSTREAM, ClOrderId("a")
         )
         r2 = await client.create_bid(
-            UPSTREAM, Sats(100_000), cfg.price, cfg.speed_limit, ClOrderId("b")
+            cfg.price, cfg.speed_limit, Sats(100_000), UPSTREAM, ClOrderId("b")
         )
 
         assert r1.id != r2.id

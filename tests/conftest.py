@@ -159,10 +159,10 @@ class FakeClient:
 
     async def create_bid(
         self,
-        upstream: Upstream,
-        amount_sat: Sats,
         price: HashratePrice,
         speed_limit: Hashrate,
+        amount_sat: Sats,
+        upstream: Upstream,
         cl_order_id: ClOrderId,
     ) -> CreateBidResult:
         """Create a bid, appending it to internal state."""

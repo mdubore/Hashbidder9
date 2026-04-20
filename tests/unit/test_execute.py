@@ -160,10 +160,10 @@ class TestAtomicUpstreamPairs:
 
             async def create_bid(
                 self,
-                upstream: Upstream,
-                amount_sat: Sats,
                 price: HashratePrice,
                 speed_limit: Hashrate,
+                amount_sat: Sats,
+                upstream: Upstream,
                 cl_order_id: ClOrderId,
             ) -> CreateBidResult:
                 """Fail the first create, succeed after."""
@@ -171,7 +171,7 @@ class TestAtomicUpstreamPairs:
                     self._create_fail = False
                     raise ApiError(400, "insufficient balance")
                 return await super().create_bid(
-                    upstream, amount_sat, price, speed_limit, cl_order_id
+                    price, speed_limit, amount_sat, upstream, cl_order_id
                 )
 
         failing_client = FailingCreateClient(current_bids=(bid,))

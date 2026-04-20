@@ -11,6 +11,7 @@ from hashbidder.domain.sats import Sats
 from hashbidder.domain.upstream import Upstream
 
 BidId = NewType("BidId", str)
+ClOrderId = NewType("ClOrderId", str)
 
 
 class BidStatus(Enum):
