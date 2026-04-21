@@ -156,6 +156,7 @@ class OceanClient:
         """
         # 1. Fetch JSON hashrate (Reliable API)
         api_url = f"{self._base_url}{address.value}"
+        logger.debug("Ocean API Request: GET %s", api_url)
         api_resp = await self._http.get(api_url)
 
         if not api_resp.is_success:
@@ -163,6 +164,7 @@ class OceanClient:
 
         try:
             data = api_resp.json()
+            logger.debug("Ocean API Response: %s", data)
         except ValueError as e:
             raise OceanError(200, f"invalid JSON response: {e}") from e
 
@@ -190,11 +192,13 @@ class OceanClient:
 
         # 2. Fetch HTML stats (Scrape rewards/shares)
         html_url = f"{STATS_PAGE_URL}{address.value}"
+        logger.debug("Ocean Scraper Request: GET %s", html_url)
         scraped = {}
         try:
             html_resp = await self._http.get(html_url)
             if html_resp.is_success:
                 scraped = _parse_ocean_html(html_resp.text)
+                logger.debug("Ocean Scraper Results: %s", scraped)
             else:
                 logger.warning(
                     "Failed to scrape Ocean stats page: %s", html_resp.status_code
