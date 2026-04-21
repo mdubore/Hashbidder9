@@ -22,3 +22,4 @@ bids.toml
 
 # System
 .DS_Store
+.worktrees/
