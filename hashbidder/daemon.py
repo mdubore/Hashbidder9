@@ -9,6 +9,7 @@ from pathlib import Path
 
 from hashbidder import use_cases
 from hashbidder.bid_runner import ActionStatus
+from hashbidder.broadcast_hub import BroadcastHub
 from hashbidder.client import BidStatus, HashpowerClient
 from hashbidder.config import TargetHashrateConfig, load_config
 from hashbidder.domain.bid_planning import CancelAction, CreateAction, EditAction
@@ -17,9 +18,22 @@ from hashbidder.domain.hashrate import HashUnit
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.mempool_client import MempoolSource
 from hashbidder.metrics import MetricRow, MetricsRepo
-from hashbidder.ocean_client import OceanSource, OceanTimeWindow
+from hashbidder.ocean_client import AccountStats, OceanSource, OceanTimeWindow
 
 logger = logging.getLogger(__name__)
+
+
+def _select_actual_ocean_hashrate_phs(stats: AccountStats) -> Decimal:
+    """Select the Ocean hashrate used for dashboard "actual" metrics."""
+    for preferred_window in (
+        OceanTimeWindow.FIVE_MINUTES,
+        OceanTimeWindow.TEN_MINUTES,
+        OceanTimeWindow.DAY,
+    ):
+        for window in stats.windows:
+            if window.window is preferred_window:
+                return window.hashrate.to(HashUnit.PH, TimeUnit.SECOND).value
+    return Decimal(0)
 
 
 async def daemon_loop(
@@ -30,6 +44,7 @@ async def daemon_loop(
     metrics_repo: MetricsRepo,
     ocean_address: BtcAddress,
     interval_seconds: int = 300,
+    hub: BroadcastHub | None = None,
 ) -> None:
     """Run the non-interactive bid-reconciliation and metrics-collection loop.
 
@@ -41,12 +56,13 @@ async def daemon_loop(
         metrics_repo: The repository to store metrics in.
         ocean_address: The Bitcoin address to monitor for Ocean metrics.
         interval_seconds: How often to run the loop (default 300 seconds).
+        hub: Optional broadcast hub for SSE updates.
     """
     logger.info("Starting daemon loop with interval=%ds", interval_seconds)
     while True:
         tick_start = datetime.now(UTC)
         try:
-            await _tick(
+            row = await _tick(
                 config_path=config_path,
                 braiins_client=braiins_client,
                 ocean_client=ocean_client,
@@ -54,6 +70,8 @@ async def daemon_loop(
                 metrics_repo=metrics_repo,
                 ocean_address=ocean_address,
             )
+            if hub and row:
+                hub.publish(row)
         except Exception:
             logger.exception("Unexpected error in daemon loop")
 
@@ -70,7 +88,7 @@ async def _tick(
     mempool_client: MempoolSource,
     metrics_repo: MetricsRepo,
     ocean_address: BtcAddress,
-) -> None:
+) -> MetricRow | None:
     """Execute a single tick: metrics collection then reconciliation."""
     # 1. Setup & Config
     braiins_connected = False
@@ -88,7 +106,7 @@ async def _tick(
         config = load_config(config_path)
     except Exception as e:
         logger.error("Failed to load config: %s", e)
-        return
+        return None
 
     # 2. Reconcile
     try:
@@ -179,24 +197,7 @@ async def _tick(
         ocean_shares_window = stats.shares_window
         ocean_estimated_rewards_sat = stats.estimated_rewards
         ocean_next_block_earnings_sat = stats.next_block_earnings
-        for window in stats.windows:
-            # Switch to 5-minute for "Actual" pulses.
-            if window.window in (
-                OceanTimeWindow.FIVE_MINUTES,
-                OceanTimeWindow.TEN_MINUTES,
-            ):
-                ocean_hashrate_phs = window.hashrate.to(
-                    HashUnit.PH, TimeUnit.SECOND
-                ).value
-                break
-        # Fallback to DAY if smaller windows are missing
-        if ocean_hashrate_phs == 0:
-            for window in stats.windows:
-                if window.window is OceanTimeWindow.DAY:
-                    ocean_hashrate_phs = window.hashrate.to(
-                        HashUnit.PH, TimeUnit.SECOND
-                    ).value
-                    break
+        ocean_hashrate_phs = _select_actual_ocean_hashrate_phs(stats)
         ocean_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Ocean metrics: %s", e)
@@ -256,3 +257,4 @@ async def _tick(
         bids_cancelled,
         f"{balance_sat}" if balance_sat is not None else "N/A",
     )
+    return row

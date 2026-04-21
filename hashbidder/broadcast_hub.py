@@ -1,3 +1,5 @@
+"""A bounded-queue broadcast hub for broadcasting messages to multiple subscribers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -5,12 +7,13 @@ from typing import Any, Final
 
 OVERFLOW_SIGNAL: Final = "OVERFLOW"
 
+
 class BroadcastHub:
     """A bounded-queue broadcast hub with overflow signaling."""
 
     def __init__(self, maxsize: int = 50) -> None:
         """Initialize the hub.
-        
+
         Args:
             maxsize: The maximum size for subscriber queues.
         """

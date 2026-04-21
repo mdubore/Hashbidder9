@@ -19,6 +19,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from hashbidder.broadcast_hub import BroadcastHub
 from hashbidder.client import API_BASE, BraiinsClient
 from hashbidder.config import ExplicitBidsModel, TargetHashrateModel
 from hashbidder.daemon import daemon_loop
@@ -49,6 +50,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage lifecycle of the dashboard and its background tasks."""
     load_dotenv()
     await repo.init_db()
+
+    # Initialize app state
+    broadcast_hub = BroadcastHub()
+    app.state.broadcast_hub = broadcast_hub
+    app.state.metrics_repo = repo
 
     # Resolve OCEAN_ADDRESS
     address_str = os.environ.get("OCEAN_ADDRESS")
@@ -84,6 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 metrics_repo=repo,
                 ocean_address=ocean_address,
                 interval_seconds=interval_seconds,
+                hub=broadcast_hub,
             )
         )
 
