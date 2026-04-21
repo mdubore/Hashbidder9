@@ -39,7 +39,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       command: [
         'sh',
         '-c',
-        'chown -R appuser:appuser /app/data && exec gosu appuser hashbidder web --host 0.0.0.0 --port ' +
+        'chown -R appuser:appuser /app/data && exec gosu appuser hashbidder -v web --host 0.0.0.0 --port ' +
           String(WEB_UI_PORT),
       ],
       env,

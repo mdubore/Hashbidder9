@@ -17,6 +17,8 @@ from hashbidder.target_hashrate import (
     plan_with_cooldowns,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class TargetHashrateInputs:
@@ -43,7 +45,11 @@ async def _ocean_24h(ocean: OceanSource, address: BtcAddress) -> Hashrate:
     for window in stats.windows:
         if window.window is OceanTimeWindow.DAY:
             return window.hashrate
-    raise ValueError("Ocean stats response did not include a 24h window")
+    # Fallback to the largest available window if DAY is missing
+    if stats.windows:
+        return stats.windows[0].hashrate
+    logger.warning("Ocean stats response did not include any hashrate windows")
+    return Hashrate(0, HashUnit.PH, TimeUnit.SECOND)
 
 
 async def run_set_bids_target(

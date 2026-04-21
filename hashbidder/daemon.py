@@ -169,15 +169,13 @@ async def _tick(
         ocean_estimated_rewards_sat = stats.estimated_rewards
         ocean_next_block_earnings_sat = stats.next_block_earnings
         for window in stats.windows:
-            # Switch to 1-hour or 5-minute for "Actual" pulses.
-            # We'll use DAY (24h) for the legacy line, but we should consider
-            # picking the smallest available window for the "Actual" reception.
-            if window.window is OceanTimeWindow.FIVE_MINUTES:
+            # Switch to 5-minute for "Actual" pulses.
+            if window.window in (OceanTimeWindow.FIVE_MINUTES, OceanTimeWindow.TEN_MINUTES):
                 ocean_hashrate_phs = window.hashrate.to(
                     HashUnit.PH, TimeUnit.SECOND
                 ).value
                 break
-        # Fallback to DAY if 5m is missing
+        # Fallback to DAY if smaller windows are missing
         if ocean_hashrate_phs == 0:
             for window in stats.windows:
                 if window.window is OceanTimeWindow.DAY:

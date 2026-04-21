@@ -21,7 +21,8 @@ from hashbidder.domain.user_bid import BidId, BidStatus, ClOrderId, UserBid
 
 logger = logging.getLogger(__name__)
 
-API_BASE = httpx.URL("https://hashpower.braiins.com/v1")
+# Use the full API path
+API_BASE = httpx.URL("https://hashpower.braiins.com/api/v1")
 
 __all__ = [
     "API_BASE",
@@ -370,6 +371,7 @@ class BraiinsClient:
     ) -> Any:
         """Issue an authenticated request to the Braiins API."""
         url = f"{self._base_url}{path}"
+        logger.debug("Braiins Request: %s %s", method, url)
         response = await self._http.request(
             method, url, json=body, headers=self._auth_headers()
         )

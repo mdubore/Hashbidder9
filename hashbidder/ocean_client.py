@@ -186,6 +186,7 @@ class OceanClient:
         """
         url = f"{self._base_url}{address.value}"
         resp = await self._http.get(url)
+        logger.debug("Ocean API response status: %s", resp.status_code)
         if not resp.is_success:
             raise OceanError(
                 resp.status_code,
@@ -194,6 +195,7 @@ class OceanClient:
         try:
             data = resp.json()
         except ValueError as e:
+            logger.error("Ocean invalid JSON: %s", resp.text)
             raise OceanError(200, f"invalid JSON response: {e}") from e
 
         if not isinstance(data, dict):
