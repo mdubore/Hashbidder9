@@ -175,8 +175,9 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
             return None
         return Hashrate(Decimal(str(val)), HashUnit.PH, TimeUnit.SECOND)
 
-    # Note: avg_speed_ph in state_estimate is the real-time speed.
-    # delivered_hr in counters (if present) is the cumulative delivery.
+    # Braiins v1 API Field mapping:
+    # state_estimate.avg_speed_ph -> Momentary hashrate
+    # counters.delivered_hr_ph -> Cumulative/Averaged hashrate
     current_speed = parse_phs(state.get("avg_speed_ph"))
     delivered_hr = parse_phs(counters.get("delivered_hr_ph"))
 
@@ -207,7 +208,7 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         shares_accepted=int(counters.get("accepted_shares", 0)),
         shares_rejected=int(counters.get("rejected_shares", 0)),
         current_speed=current_speed,
-        delivered_hashrate=delivered_hr or current_speed,
+        delivered_hashrate=delivered_hr if delivered_hr and delivered_hr.value > 0 else current_speed,
     )
 
 

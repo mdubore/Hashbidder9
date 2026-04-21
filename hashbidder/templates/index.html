@@ -350,21 +350,29 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Accepted',
-                            data: historyData.map(d => d.accepted),
+                            label: 'Accepted/min',
+                            data: historyData.map((d, i) => {
+                                if (i === 0) return 0;
+                                const diff = d.accepted - historyData[i-1].accepted;
+                                const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
+                                return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
+                            }),
                             borderColor: '#4caf50',
                             backgroundColor: 'rgba(76, 175, 80, 0.2)',
                             fill: true,
-                            stack: 'stack1',
                             yAxisID: 'y'
                         },
                         {
-                            label: 'Rejected',
-                            data: historyData.map(d => d.rejected),
+                            label: 'Rejected/min',
+                            data: historyData.map((d, i) => {
+                                if (i === 0) return 0;
+                                const diff = d.rejected - historyData[i-1].rejected;
+                                const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
+                                return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
+                            }),
                             borderColor: '#f44336',
                             backgroundColor: 'rgba(244, 67, 54, 0.2)',
                             fill: true,
-                            stack: 'stack1',
                             yAxisID: 'y'
                         },
                         {
@@ -387,8 +395,7 @@
                         ...commonOptions.scales,
                         y: {
                             ...commonOptions.scales.y,
-                            stacked: true,
-                            title: { display: true, text: 'Shares', color: '#b0b0b0' }
+                            title: { display: true, text: 'Shares/min', color: '#b0b0b0' }
                         },
                         y1: {
                             position: 'right',
