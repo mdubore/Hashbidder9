@@ -208,7 +208,9 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         shares_accepted=int(counters.get("accepted_shares", 0)),
         shares_rejected=int(counters.get("rejected_shares", 0)),
         current_speed=current_speed,
-        delivered_hashrate=delivered_hr if delivered_hr and delivered_hr.value > 0 else current_speed,
+        delivered_hashrate=delivered_hr
+        if delivered_hr and delivered_hr.value > 0
+        else current_speed,
     )
 
 

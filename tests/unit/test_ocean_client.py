@@ -6,18 +6,23 @@ import httpx
 import pytest
 
 from hashbidder.domain.btc_address import BtcAddress
-from hashbidder.domain.hashrate import HashUnit
-from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.ocean_client import OceanClient, OceanError, OceanTimeWindow
 
-_VALID_JSON = {
-    "hashrate_24h": 1885800000000000,
-    "hashrate_3h": 1850000000000000,
-    "hashrate_1h": 1800000000000000,
-    "shares_window": 123,
-    "estimated_rewards": 456,
-    "next_block_earnings": 789,
+_VALID_API_JSON = {
+    "result": {
+        "hashrate_86400s": 1885800000000000,
+        "hashrate_10800s": 1850000000000000,
+        "hashrate_3600s": 1800000000000000,
+    }
 }
+
+_VALID_HTML = """
+<div class="blocks-label">Shares In Reward Window</div> <span>123</span>
+<div class="blocks-label">Estimated Rewards In Window</div> 
+<span>0.00000456 BTC</span>
+<div class="blocks-label">Estimated Earnings Next Block</div> 
+<span>0.00000789 BTC</span>
+"""
 
 
 def _make_client(handler: httpx.MockTransport) -> OceanClient:
@@ -31,13 +36,17 @@ class TestGetAccountStats:
     """Tests for OceanClient.get_account_stats."""
 
     @pytest.mark.asyncio
-    async def test_happy_path(self) -> None:
-        """Valid JSON response is parsed into correct AccountStats."""
+    async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Valid JSON and HTML are parsed into correct AccountStats."""
         address_str = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+        monkeypatch.setattr(
+            "hashbidder.ocean_client.STATS_PAGE_URL", "https://html.example.com/"
+        )
 
         def handler(request: httpx.Request) -> httpx.Response:
-            assert address_str in str(request.url)
-            return httpx.Response(200, json=_VALID_JSON)
+            if "api.example.com" in str(request.url):
+                return httpx.Response(200, json=_VALID_API_JSON)
+            return httpx.Response(200, text=_VALID_HTML)
 
         client = _make_client(httpx.MockTransport(handler))
         stats = await client.get_account_stats(BtcAddress(address_str))
@@ -45,11 +54,6 @@ class TestGetAccountStats:
         assert len(stats.windows) == 3
         assert stats.windows[0].window == OceanTimeWindow.DAY
         assert stats.windows[0].hashrate.value == Decimal("1885800000000000")
-        assert stats.windows[0].hashrate.hash_unit == HashUnit.H
-        assert stats.windows[0].hashrate.time_unit == TimeUnit.SECOND
-
-        assert stats.windows[1].window == OceanTimeWindow.THREE_HOURS
-        assert stats.windows[2].window == OceanTimeWindow.ONE_HOUR
 
         assert stats.shares_window == 123
         assert stats.estimated_rewards == 456

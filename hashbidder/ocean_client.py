@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -88,29 +88,45 @@ class OceanSource(Protocol):
 def _parse_ocean_html(html: str) -> dict[str, int]:
     """Scrape rewards and shares from the Ocean stats HTML."""
     res = {}
-    
+
     # Shares In Reward Window
-    # Pattern: <div class="blocks-label">Shares In Reward Window</div> <span>11.78G</span>
-    share_match = re.search(r"Shares In Reward Window.*?<span>([\d.]+)([KMG]?)", html, re.DOTALL | re.IGNORECASE)
+    # Pattern: <div class="blocks-label">Shares In Reward Window</div>
+    # <span>11.78G</span>
+    share_match = re.search(
+        r"Shares In Reward Window.*?<span>([\d.]+)([KMG]?)",
+        html,
+        re.DOTALL | re.IGNORECASE,
+    )
     if share_match:
         val = float(share_match.group(1))
         suffix = share_match.group(2).upper()
         multiplier = 1
-        if suffix == 'K': multiplier = 1_000
-        elif suffix == 'M': multiplier = 1_000_000
-        elif suffix == 'G': multiplier = 1_000_000_000
+        if suffix == "K":
+            multiplier = 1_000
+        elif suffix == "M":
+            multiplier = 1_000_000
+        elif suffix == "G":
+            multiplier = 1_000_000_000
         res["shares_window"] = int(val * multiplier)
 
     # Estimated Rewards In Window
     # Pattern: <span>0.00027141 BTC</span>
-    reward_match = re.search(r"Estimated Rewards In Window.*?<span>([\d.]+) BTC</span>", html, re.DOTALL | re.IGNORECASE)
+    reward_match = re.search(
+        r"Estimated Rewards In Window.*?<span>([\d.]+) BTC</span>",
+        html,
+        re.DOTALL | re.IGNORECASE,
+    )
     if reward_match:
         btc_val = Decimal(reward_match.group(1))
         res["estimated_rewards"] = int(btc_val * 100_000_000)
 
     # Estimated Earnings Next Block
     # Pattern: <span>0.00003374 BTC</span>
-    next_match = re.search(r"Estimated Earnings Next Block.*?<span>([\d.]+) BTC</span>", html, re.DOTALL | re.IGNORECASE)
+    next_match = re.search(
+        r"Estimated Earnings Next Block.*?<span>([\d.]+) BTC</span>",
+        html,
+        re.DOTALL | re.IGNORECASE,
+    )
     if next_match:
         btc_val = Decimal(next_match.group(1))
         res["next_block_earnings"] = int(btc_val * 100_000_000)
@@ -133,41 +149,58 @@ class OceanClient:
 
     @ocean_retry
     async def get_account_stats(self, address: BtcAddress) -> AccountStats:
-        """Fetch hashrate stats and scraped reward data."""
+        """Fetch hashrate stats and scraped reward data.
+
+        Raises:
+            OceanError: If the primary hashrate API fails.
+        """
         # 1. Fetch JSON hashrate (Reliable API)
         api_url = f"{self._base_url}{address.value}"
         api_resp = await self._http.get(api_url)
-        
-        windows: list[HashrateWindow] = []
-        if api_resp.is_success:
+
+        if not api_resp.is_success:
+            raise OceanError(api_resp.status_code, api_resp.text or "API error")
+
+        try:
             data = api_resp.json()
-            result = data.get("result", {})
-            
-            mapping = {
-                "hashrate_86400s": OceanTimeWindow.DAY,
-                "hashrate_10800s": OceanTimeWindow.THREE_HOURS,
-                "hashrate_3600s": OceanTimeWindow.ONE_HOUR,
-                "hashrate_600s": OceanTimeWindow.TEN_MINUTES,
-                "hashrate_300s": OceanTimeWindow.FIVE_MINUTES,
-                "hashrate_60s": OceanTimeWindow.SIXTY_SECONDS,
-            }
-            for key, window_enum in mapping.items():
-                if key in result:
-                    hashrate = Hashrate(
-                        value=Decimal(str(result[key])),
-                        hash_unit=HashUnit.H,
-                        time_unit=TimeUnit.SECOND,
-                    )
-                    windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
+        except ValueError as e:
+            raise OceanError(200, f"invalid JSON response: {e}") from e
+
+        if not isinstance(data, dict):
+            raise OceanError(200, f"expected JSON object, got {type(data).__name__}")
+
+        result = data.get("result", {})
+        windows: list[HashrateWindow] = []
+        mapping = {
+            "hashrate_86400s": OceanTimeWindow.DAY,
+            "hashrate_10800s": OceanTimeWindow.THREE_HOURS,
+            "hashrate_3600s": OceanTimeWindow.ONE_HOUR,
+            "hashrate_600s": OceanTimeWindow.TEN_MINUTES,
+            "hashrate_300s": OceanTimeWindow.FIVE_MINUTES,
+            "hashrate_60s": OceanTimeWindow.SIXTY_SECONDS,
+        }
+        for key, window_enum in mapping.items():
+            if key in result:
+                hashrate = Hashrate(
+                    value=Decimal(str(result[key])),
+                    hash_unit=HashUnit.H,
+                    time_unit=TimeUnit.SECOND,
+                )
+                windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
 
         # 2. Fetch HTML stats (Scrape rewards/shares)
         html_url = f"{STATS_PAGE_URL}{address.value}"
-        html_resp = await self._http.get(html_url)
         scraped = {}
-        if html_resp.is_success:
-            scraped = _parse_ocean_html(html_resp.text)
-        else:
-            logger.warning("Failed to scrape Ocean stats page: %s", html_resp.status_code)
+        try:
+            html_resp = await self._http.get(html_url)
+            if html_resp.is_success:
+                scraped = _parse_ocean_html(html_resp.text)
+            else:
+                logger.warning(
+                    "Failed to scrape Ocean stats page: %s", html_resp.status_code
+                )
+        except Exception as e:
+            logger.warning("Error scraping Ocean stats page: %s", e)
 
         return AccountStats(
             windows=tuple(windows),

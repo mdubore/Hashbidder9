@@ -148,11 +148,11 @@ async def _tick(
             # Pick the price of any valid bid we find (Active, Created, or Paused)
             # to ensure the "Active Bid" line is populated on the graph.
             if active_bid_price_sat is None and bid.status in (
-                BidStatus.ACTIVE, BidStatus.CREATED, BidStatus.PAUSED
+                BidStatus.ACTIVE,
+                BidStatus.CREATED,
+                BidStatus.PAUSED,
             ):
-                active_bid_price_sat = int(
-                    bid.price.to(HashUnit.PH, TimeUnit.DAY).sats
-                )
+                active_bid_price_sat = int(bid.price.to(HashUnit.PH, TimeUnit.DAY).sats)
 
             # Use Delivered Hashrate (Averaged) for the primary Braiins line.
             # Use Current Speed (Momentary) if you wanted to see the jitter.
