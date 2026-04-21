@@ -21,7 +21,7 @@ from hashbidder.domain.user_bid import BidId, BidStatus, ClOrderId, UserBid
 
 logger = logging.getLogger(__name__)
 
-# Use the full API path
+# Use the verified working base URL
 API_BASE = httpx.URL("https://hashpower.braiins.com/v1")
 
 __all__ = [
@@ -166,14 +166,19 @@ class HashpowerClient(Protocol):
 
 def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     bid = item["bid"]
-    state = item.get("state_estimate")
-    counters = item.get("counters")
+    state = item.get("state_estimate", {})
+    counters = item.get("counters", {})
     upstream = bid.get("dest_upstream")
 
-    def parse_hr(val: Any) -> Hashrate | None:
+    def parse_phs(val: Any) -> Hashrate | None:
         if val is None:
             return None
-        return Hashrate(Decimal(str(val)), HashUnit.H, TimeUnit.SECOND)
+        return Hashrate(Decimal(str(val)), HashUnit.PH, TimeUnit.SECOND)
+
+    # Note: avg_speed_ph in state_estimate is the real-time speed.
+    # delivered_hr in counters (if present) is the cumulative delivery.
+    current_speed = parse_phs(state.get("avg_speed_ph"))
+    delivered_hr = parse_phs(counters.get("delivered_hr_ph"))
 
     return UserBid(
         id=BidId(bid["id"]),
@@ -187,10 +192,10 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         amount_sat=Sats(int(bid["amount_sat"])),
         status=BidStatus(bid["status"]),
         progress=Progress.from_percentage(Decimal(state["progress_pct"]))
-        if state and "progress_pct" in state
+        if "progress_pct" in state
         else None,
         amount_remaining_sat=Sats(int(state["amount_remaining_sat"]))
-        if state and "amount_remaining_sat" in state
+        if "amount_remaining_sat" in state
         else None,
         last_updated=datetime.fromisoformat(bid["last_updated"]),
         upstream=Upstream(
@@ -199,14 +204,10 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         )
         if upstream is not None
         else None,
-        shares_accepted=int(counters["accepted_shares"])
-        if counters and "accepted_shares" in counters
-        else None,
-        shares_rejected=int(counters["rejected_shares"])
-        if counters and "rejected_shares" in counters
-        else None,
-        current_speed=parse_hr(state.get("speed_hr")) if state else None,
-        delivered_hashrate=parse_hr(counters.get("delivered_hr")) if counters else None,
+        shares_accepted=int(counters.get("accepted_shares", 0)),
+        shares_rejected=int(counters.get("rejected_shares", 0)),
+        current_speed=current_speed,
+        delivered_hashrate=delivered_hr or current_speed,
     )
 
 
@@ -326,7 +327,7 @@ class BraiinsClient:
                 "identity": upstream.identity,
             },
         }
-        data = await self._request("POST", "/spot/bid/create", body=body)
+        data = await self._request("POST", "/spot/bid", body=body)
         return CreateBidResult(id=BidId(data["id"]))
 
     async def edit_bid(
@@ -382,7 +383,9 @@ class BraiinsClient:
         if not response.text:
             return None
 
-        return response.json()
+        data = response.json()
+        logger.debug("Braiins JSON: %s", data)
+        return data
 
     def _auth_headers(self) -> dict[str, str]:
         """Build the required authentication headers."""

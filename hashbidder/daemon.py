@@ -9,7 +9,7 @@ from pathlib import Path
 
 from hashbidder import use_cases
 from hashbidder.bid_runner import ActionStatus
-from hashbidder.client import HashpowerClient
+from hashbidder.client import BidStatus, HashpowerClient
 from hashbidder.config import TargetHashrateConfig, load_config
 from hashbidder.domain.bid_planning import CancelAction, CreateAction, EditAction
 from hashbidder.domain.btc_address import BtcAddress
@@ -138,10 +138,22 @@ async def _tick(
     bids_active = 0
     braiins_shares_accepted = 0
     braiins_shares_rejected = 0
+    active_bid_price_sat = None
     try:
         current_bids = await braiins_client.get_current_bids()
         bids_active = len(current_bids)
+        if not current_bids:
+            logger.warning("No active bids found on Braiins account.")
         for bid in current_bids:
+            # Pick the price of any valid bid we find (Active, Created, or Paused)
+            # to ensure the "Active Bid" line is populated on the graph.
+            if active_bid_price_sat is None and bid.status in (
+                BidStatus.ACTIVE, BidStatus.CREATED, BidStatus.PAUSED
+            ):
+                active_bid_price_sat = int(
+                    bid.price.to(HashUnit.PH, TimeUnit.DAY).sats
+                )
+
             # Use Delivered Hashrate (Averaged) for the primary Braiins line.
             # Use Current Speed (Momentary) if you wanted to see the jitter.
             # We'll use delivered_hashrate as it's more stable for the dashboard.
@@ -189,8 +201,10 @@ async def _tick(
     except Exception as e:
         logger.warning("Failed to fetch Ocean metrics: %s", e)
 
+    hashvalue_sat = None
     try:
-        await mempool_client.get_chain_stats(block_count=1)
+        hashvalue_comp = await use_cases.run_hashvalue(mempool_client)
+        hashvalue_sat = int(hashvalue_comp.hashvalue.sats)
         mempool_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Mempool metrics: %s", e)
@@ -223,6 +237,8 @@ async def _tick(
         ocean_shares_window=ocean_shares_window,
         ocean_estimated_rewards_sat=ocean_estimated_rewards_sat,
         ocean_next_block_earnings_sat=ocean_next_block_earnings_sat,
+        hashvalue_sat=hashvalue_sat,
+        active_bid_price_sat=active_bid_price_sat,
     )
     await metrics_repo.insert(row)
 

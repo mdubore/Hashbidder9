@@ -103,7 +103,7 @@
         </nav>
         <h1>Hashbidder Performance Dashboard</h1>
         
-        <div class="status-header">
+        <div class="status-header" hx-get="/" hx-trigger="every 60s" hx-target="body" hx-select="body" hx-swap="outerHTML">
             <span class="status-chip {{ 'status-green' if current_status and current_status.braiins_connected else 'status-red' }}">
                 Braiins
             </span>
@@ -121,6 +121,9 @@
                     N/A
                 {% endif %}
             </span>
+            <span style="margin-left: auto; color: #888; font-size: 0.8rem; align-self: center;">
+                Last updated: {{ now.strftime('%H:%M:%S') if now else 'Just now' }}
+            </span>
         </div>
 
         <div id="dashboard-content">
@@ -129,7 +132,7 @@
             {% else %}
                 <div class="dashboard-grid">
                     <div class="chart-container">
-                        <h3>Hashrate Performance (PH/s)</h3>
+                        <h3>Hashrate Performance (TH/s)</h3>
                         <canvas id="hashrateChart"></canvas>
                     </div>
                     <div class="chart-container">
@@ -154,15 +157,17 @@
             {% for row in history %}
             {
                 timestamp: new Date({{ row.timestamp }} * 1000),
-                ocean: {{ row.ocean_hashrate_phs | float if row.ocean_hashrate_phs is not none else 0 }},
-                target: {{ row.target_hashrate_phs | float if row.target_hashrate_phs is not none else 'null' }},
-                braiins: {{ row.braiins_hashrate_phs | float if row.braiins_hashrate_phs is not none else 0 }},
+                ocean: {{ (row.ocean_hashrate_phs | float * 1000) if row.ocean_hashrate_phs is not none else 0 }},
+                target: {{ (row.target_hashrate_phs | float * 1000) if row.target_hashrate_phs is not none else 'null' }},
+                braiins: {{ (row.braiins_hashrate_phs | float * 1000) if row.braiins_hashrate_phs is not none else 0 }},
                 price: {{ row.market_price_sat if row.market_price_sat is not none else 'null' }},
                 accepted: {{ row.braiins_shares_accepted if row.braiins_shares_accepted is not none else 0 }},
                 rejected: {{ row.braiins_shares_rejected if row.braiins_shares_rejected is not none else 0 }},
                 ocean_shares: {{ row.ocean_shares_window if row.ocean_shares_window is not none else 0 }},
                 estimated_rewards: {{ row.ocean_estimated_rewards_sat if row.ocean_estimated_rewards_sat is not none else 0 }},
-                next_block_earnings: {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }}
+                next_block_earnings: {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }},
+                hashvalue: {{ row.hashvalue_sat if row.hashvalue_sat is not none else 'null' }},
+                active_bid: {{ row.active_bid_price_sat if row.active_bid_price_sat is not none else 'null' }}
             }{{ "," if not loop.last }}
             {% endfor %}
         ];
@@ -285,7 +290,7 @@
                         ...commonOptions.scales,
                         y: {
                             ...commonOptions.scales.y,
-                            title: { display: true, text: 'PH/s', color: '#b0b0b0' }
+                            title: { display: true, text: 'TH/s', color: '#b0b0b0' }
                         }
                     }
                 }
@@ -305,6 +310,24 @@
                             fill: true,
                             tension: 0.3,
                             pointRadius: 2
+                        },
+                        {
+                            label: 'Hashvalue',
+                            data: historyData.map(d => d.hashvalue),
+                            borderColor: '#f44336',
+                            borderDash: [2, 2],
+                            fill: false,
+                            tension: 0,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Active Bid',
+                            data: historyData.map(d => d.active_bid),
+                            borderColor: '#4caf50',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 1
                         }
                     ]
                 },

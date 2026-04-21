@@ -34,6 +34,9 @@ class MetricRow:
     ocean_shares_window: int | None = None
     ocean_estimated_rewards_sat: int | None = None
     ocean_next_block_earnings_sat: int | None = None
+    # Price Comparison
+    hashvalue_sat: int | None = None
+    active_bid_price_sat: int | None = None
 
 
 class MetricsRepo:
@@ -83,6 +86,8 @@ class MetricsRepo:
                 ("ocean_shares_window", "INTEGER"),
                 ("ocean_estimated_rewards_sat", "INTEGER"),
                 ("ocean_next_block_earnings_sat", "INTEGER"),
+                ("hashvalue_sat", "INTEGER"),
+                ("active_bid_price_sat", "INTEGER"),
             ]
             for col_name, col_type in columns:
                 with contextlib.suppress(aiosqlite.OperationalError):
@@ -101,7 +106,7 @@ class MetricsRepo:
         async with aiosqlite.connect(self.db_path) as db:
             query = (
                 "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?, ?, ?, ?, ?, ?, ?)"
+                "?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             await db.execute(
                 query,
@@ -129,6 +134,8 @@ class MetricsRepo:
                     row.ocean_shares_window,
                     row.ocean_estimated_rewards_sat,
                     row.ocean_next_block_earnings_sat,
+                    row.hashvalue_sat,
+                    row.active_bid_price_sat,
                 ),
             )
             await db.commit()
@@ -174,6 +181,8 @@ class MetricsRepo:
                     ocean_shares_window=r["ocean_shares_window"],
                     ocean_estimated_rewards_sat=r["ocean_estimated_rewards_sat"],
                     ocean_next_block_earnings_sat=r["ocean_next_block_earnings_sat"],
+                    hashvalue_sat=r["hashvalue_sat"],
+                    active_bid_price_sat=r["active_bid_price_sat"],
                 )
                 for r in rows
             ]

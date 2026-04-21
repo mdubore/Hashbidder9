@@ -8,6 +8,7 @@ import time
 import tomllib
 import traceback
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any
@@ -141,7 +142,11 @@ async def index(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={"history": history, "current_status": current_status},
+            context={
+                "history": history,
+                "current_status": current_status,
+                "now": datetime.now(UTC),
+            },
         )
     except Exception as e:
         logger.error("Error rendering dashboard: %s", e)
