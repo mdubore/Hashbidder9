@@ -167,7 +167,8 @@ class HashpowerClient(Protocol):
 def _parse_user_bid(item: dict[str, Any]) -> UserBid:
     bid = item["bid"]
     state = item.get("state_estimate", {})
-    counters = item.get("counters", {})
+    # Use counters_committed for history, counters_estimate for real-time jitter.
+    counters = item.get("counters_committed") or item.get("counters_estimate") or {}
     upstream = bid.get("dest_upstream")
 
     def parse_phs(val: Any) -> Hashrate | None:

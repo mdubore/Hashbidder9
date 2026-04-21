@@ -2,6 +2,12 @@
 
 hashbidder is a small tool to manage bidding in [Braiins Hashpower](https://academy.braiins.com/en/braiins-hashpower/about/) market automatically. You declare a config file and hashbidder uses [Hashpower's API](https://hashpower.braiins.com/api/) to align your open bids with it.
 
+**⚠️ WARNING: This code is experimental and should be considered unstable. We strongly recommend users to evaluate the code for bugs and security risks before use. Use at your own risk.**
+
+## Credits
+
+This project is a fork of and owes a big thank you to: [counterweightoperator/hashbidder](https://github.com/counterweightoperator/hashbidder).
+
 ## Disclaimers
 
 hashbidder is severely under-tested and most probably has bugs. If used against the actual Braiins Hashpower market, it's going to use your money in a real market, and thus you can end up spending money in a way you don't want. You use hashbidder under at your own risk.

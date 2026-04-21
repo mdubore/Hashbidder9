@@ -2,6 +2,23 @@
 node_modules/
 javascript/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.hypothesis/
+
 # StartOS
 *.s9pk
 dist/
+hashbidder.sqlite
+bids.toml
+.env
+
+# System
+.DS_Store
