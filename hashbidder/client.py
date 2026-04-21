@@ -176,8 +176,16 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         return Hashrate(Decimal(str(val)), HashUnit.PH, TimeUnit.SECOND)
 
     # Braiins v1 API Field mapping:
-    # state_estimate.avg_speed_ph -> Momentary hashrate
-    # counters.delivered_hr_ph -> Cumulative/Averaged hashrate
+    # counters_estimate.shares_accepted_m -> Shares in millions
+    # counters_estimate.shares_rejected_m -> Shares in millions
+    def parse_shares(val: Any) -> int:
+        if val is None:
+            return 0
+        try:
+            return int(float(val) * 1_000_000)
+        except (ValueError, TypeError):
+            return 0
+
     current_speed = parse_phs(state.get("avg_speed_ph"))
     delivered_hr = parse_phs(counters.get("delivered_hr_ph"))
 
@@ -205,8 +213,8 @@ def _parse_user_bid(item: dict[str, Any]) -> UserBid:
         )
         if upstream is not None
         else None,
-        shares_accepted=int(counters.get("accepted_shares", 0)),
-        shares_rejected=int(counters.get("rejected_shares", 0)),
+        shares_accepted=parse_shares(counters.get("shares_accepted_m")),
+        shares_rejected=parse_shares(counters.get("shares_rejected_m")),
         current_speed=current_speed,
         delivered_hashrate=delivered_hr
         if delivered_hr and delivered_hr.value > 0

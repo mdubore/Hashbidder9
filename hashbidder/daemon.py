@@ -245,11 +245,12 @@ async def _tick(
     # 5. Logging
     logger.info(
         "Tick complete: Target %s PH/s, Ocean actual %s PH/s. "
-        "Market Price %s sat. Actions: %d CREATE, %d EDIT, %d CANCEL. "
-        "Balance %s sat.",
+        "Market Price %s sat, Active Bid %s sat. "
+        "Actions: %d CREATE, %d EDIT, %d CANCEL. Balance %s sat.",
         f"{target_hashrate_phs:.2f}" if target_hashrate_phs is not None else "N/A",
         f"{ocean_hashrate_phs:.2f}",
         market_price_sat if market_price_sat is not None else "N/A",
+        active_bid_price_sat if active_bid_price_sat is not None else "N/A",
         bids_created,
         bids_edited,
         bids_cancelled,

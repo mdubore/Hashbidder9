@@ -94,368 +94,288 @@
     </style>
 </head>
 <body>
-    <div class="container" id="dashboard-root" hx-get="/" hx-trigger="every 60s" hx-select="#dashboard-root" hx-target="#dashboard-root" hx-swap="outerHTML">
-        <nav>
-            <div class="nav-links">
-                <a href="/">Dashboard</a>
-                <a href="/settings">Settings</a>
-            </div>
-        </nav>
-        <h1>Hashbidder Performance Dashboard</h1>
-        
-        <div class="status-header">
-            <span class="status-chip {{ 'status-green' if current_status and current_status.braiins_connected else 'status-red' }}">
-                Braiins
-            </span>
-            <span class="status-chip {{ 'status-green' if current_status and current_status.ocean_connected else 'status-red' }}">
-                Ocean
-            </span>
-            <span class="status-chip {{ 'status-green' if current_status and current_status.mempool_connected else 'status-red' }}">
-                Mempool
-            </span>
-            <span class="status-chip status-blue">
-                Balance: 
-                {% if current_status and current_status.balance_sat is not none %}
-                    {{ current_status.balance_sat }} sats
-                {% else %}
-                    N/A
-                {% endif %}
-            </span>
-            <span style="margin-left: auto; color: #888; font-size: 0.8rem; align-self: center;">
-                Last updated: {{ now.strftime('%H:%M:%S') if now else 'Just now' }}
-            </span>
-        </div>
-
-        <div id="dashboard-content">
-            {% if not history %}
-                <p>No historical data available yet. Metrics will appear here as the daemon runs.</p>
-            {% else %}
-                <div class="dashboard-grid">
-                    <div class="chart-container">
-                        <h3>Hashrate Performance (TH/s)</h3>
-                        <canvas id="hashrateChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Market Price Trend (sat/PH/Day)</h3>
-                        <canvas id="priceChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Transmission Quality (Braiins Shares)</h3>
-                        <canvas id="qualityChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Ocean Rewards (Sats)</h3>
-                        <canvas id="rewardChart"></canvas>
-                    </div>
+    <!-- We swap the inner content of dashboard-root every 60s -->
+    <div class="container" id="dashboard-root" hx-get="/" hx-trigger="every 60s" hx-select="#dashboard-content-all" hx-target="#dashboard-content-all" hx-swap="innerHTML">
+        <div id="dashboard-content-all">
+            <nav>
+                <div class="nav-links">
+                    <a href="/">Dashboard</a>
+                    <a href="/settings">Settings</a>
                 </div>
-            {% endif %}
-        </div>
+            </nav>
+            <h1>Hashbidder Performance Dashboard</h1>
+            
+            <div class="status-header">
+                <span class="status-chip {{ 'status-green' if current_status and current_status.braiins_connected else 'status-red' }}">
+                    Braiins
+                </span>
+                <span class="status-chip {{ 'status-green' if current_status and current_status.ocean_connected else 'status-red' }}">
+                    Ocean
+                </span>
+                <span class="status-chip {{ 'status-green' if current_status and current_status.mempool_connected else 'status-red' }}">
+                    Mempool
+                </span>
+                <span class="status-chip status-blue">
+                    Balance: 
+                    {% if current_status and current_status.balance_sat is not none %}
+                        {{ current_status.balance_sat }} sats
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+                <span style="margin-left: auto; color: #888; font-size: 0.8rem; align-self: center;">
+                    Last updated: {{ now.strftime('%H:%M:%S') if now else 'Just now' }}
+                </span>
+            </div>
 
-        <!-- Data block for JS -->
-        <script id="history-json" type="application/json">
-            [
-                {% for row in history %}
-                {
-                    "timestamp": {{ row.timestamp }},
-                    "ocean": {{ (row.ocean_hashrate_phs | float * 1000) if row.ocean_hashrate_phs is not none else 0 }},
-                    "target": {{ (row.target_hashrate_phs | float * 1000) if row.target_hashrate_phs is not none else "null" }},
-                    "braiins": {{ (row.braiins_hashrate_phs | float * 1000) if row.braiins_hashrate_phs is not none else 0 }},
-                    "price": {{ row.market_price_sat if row.market_price_sat is not none else "null" }},
-                    "accepted": {{ row.braiins_shares_accepted if row.braiins_shares_accepted is not none else 0 }},
-                    "rejected": {{ row.braiins_shares_rejected if row.braiins_shares_rejected is not none else 0 }},
-                    "ocean_shares": {{ row.ocean_shares_window if row.ocean_shares_window is not none else 0 }},
-                    "estimated_rewards": {{ row.ocean_estimated_rewards_sat if row.ocean_estimated_rewards_sat is not none else 0 }},
-                    "next_block_earnings": {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }},
-                    "hashvalue": {{ row.hashvalue_sat if row.hashvalue_sat is not none else "null" }},
-                    "active_bid": {{ row.active_bid_price_sat if row.active_bid_price_sat is not none else "null" }}
-                }{{ "," if not loop.last }}
-                {% endfor %}
-            ]
-        </script>
+            <div id="dashboard-charts">
+                {% if not history %}
+                    <p>No historical data available yet. Metrics will appear here as the daemon runs.</p>
+                {% else %}
+                    <div class="dashboard-grid">
+                        <div class="chart-container">
+                            <h3>Hashrate Performance (TH/s)</h3>
+                            <canvas id="hashrateChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Market Price Trend (sat/PH/Day)</h3>
+                            <canvas id="priceChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Transmission Quality (Shares/min)</h3>
+                            <canvas id="qualityChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Ocean Rewards (Sats)</h3>
+                            <canvas id="rewardChart"></canvas>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Embed data into a hidden element for JS access -->
+            <script id="history-json" type="application/json">
+                [
+                    {% for row in history %}
+                    {
+                        "timestamp": {{ row.timestamp }},
+                        "ocean": {{ (row.ocean_hashrate_phs | float * 1000) if row.ocean_hashrate_phs is not none else 0 }},
+                        "target": {{ (row.target_hashrate_phs | float * 1000) if row.target_hashrate_phs is not none else "null" }},
+                        "braiins": {{ (row.braiins_hashrate_phs | float * 1000) if row.braiins_hashrate_phs is not none else 0 }},
+                        "price": {{ row.market_price_sat if row.market_price_sat is not none else "null" }},
+                        "accepted": {{ row.braiins_shares_accepted if row.braiins_shares_accepted is not none else 0 }},
+                        "rejected": {{ row.braiins_shares_rejected if row.braiins_shares_rejected is not none else 0 }},
+                        "ocean_shares": {{ row.ocean_shares_window if row.ocean_shares_window is not none else 0 }},
+                        "estimated_rewards": {{ row.ocean_estimated_rewards_sat if row.ocean_estimated_rewards_sat is not none else 0 }},
+                        "next_block_earnings": {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }},
+                        "hashvalue": {{ row.hashvalue_sat if row.hashvalue_sat is not none else "null" }},
+                        "active_bid": {{ row.active_bid_price_sat if row.active_bid_price_sat is not none else "null" }}
+                    }{{ "," if not loop.last }}
+                    {% endfor %}
+                ]
+            </script>
+        </div>
 
         <script>
-            function initCharts() {
-                const jsonEl = document.getElementById('history-json');
-                if (!jsonEl) return;
-                
-                const rawData = JSON.parse(jsonEl.textContent);
-                const historyData = rawData.map(d => ({
-                    ...d,
-                    timestamp: new Date(d.timestamp * 1000)
-                }));
+            (function() {
+                let charts = {};
 
-                function movingAverage(data, period) {
-                    return data.map((val, index, arr) => {
-                        const start = Math.max(0, index - period + 1);
-                        const subset = arr.slice(start, index + 1);
-                        const sum = subset.reduce((a, b) => a + b, 0);
-                        return sum / subset.length;
+                function initCharts() {
+                    const jsonEl = document.getElementById('history-json');
+                    if (!jsonEl) return;
+                    
+                    const rawData = JSON.parse(jsonEl.textContent);
+                    const historyData = rawData.map(d => ({
+                        ...d,
+                        timestamp: new Date(d.timestamp * 1000)
+                    }));
+
+                    if (historyData.length === 0) return;
+
+                    const labels = historyData.map(d => {
+                        return d.timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+                               d.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     });
-                }
 
-                if (historyData.length === 0) return;
-
-                const labels = historyData.map(d => {
-                    return d.timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
-                           d.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                });
-                
-                const commonOptions = {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    plugins: {
-                        legend: { 
-                            position: 'top',
-                            labels: { color: '#e0e0e0', font: { family: 'Inter', size: 12 } } 
-                        },
-                        tooltip: { 
-                            mode: 'index', 
-                            intersect: false,
-                            backgroundColor: '#1e1e1e',
-                            titleColor: '#ffffff',
-                            bodyColor: '#e0e0e0',
-                            borderColor: '#333',
-                            borderWidth: 1
-                        }
-                    },
-                    scales: {
-                        x: { 
-                            ticks: { color: '#b0b0b0', maxRotation: 45, minRotation: 45 }, 
-                            grid: { color: '#333' } 
-                        },
-                        y: { 
-                            ticks: { color: '#b0b0b0' }, 
-                            grid: { color: '#333' }
-                        }
+                    function movingAverage(data, period) {
+                        return data.map((val, index, arr) => {
+                            const start = Math.max(0, index - period + 1);
+                            const subset = arr.slice(start, index + 1);
+                            const sum = subset.reduce((a, b) => a + b, 0);
+                            return sum / subset.length;
+                        });
                     }
-                };
 
-                const oceanData = historyData.map(d => d.ocean);
-                const ma1d = movingAverage(oceanData, 288);
-                const ma10d = movingAverage(oceanData, 2880);
-                const ma30d = movingAverage(oceanData, 8640);
-
-                // Hashrate Chart
-                const hashrateCtx = document.getElementById('hashrateChart');
-                if (hashrateCtx) {
-                    new Chart(hashrateCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Ocean Actual',
-                                    data: oceanData,
-                                    borderColor: '#4caf50',
-                                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                                    fill: true,
-                                    tension: 0.3,
-                                    pointRadius: 1
-                                },
-                                { label: 'MA 1d', data: ma1d, borderColor: '#81c784', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                { label: 'MA 10d', data: ma10d, borderColor: '#ffd54f', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                { label: 'MA 30d', data: ma30d, borderColor: '#ff8a65', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                {
-                                    label: 'Target',
-                                    data: historyData.map(d => d.target),
-                                    borderColor: '#bb86fc',
-                                    borderDash: [5, 5],
-                                    fill: false,
-                                    tension: 0,
-                                    pointRadius: 0
-                                },
-                                {
-                                    label: 'Braiins Reported',
-                                    data: historyData.map(d => d.braiins),
-                                    borderColor: '#03dac6',
-                                    fill: false,
-                                    tension: 0.3,
-                                    pointRadius: 1
-                                }
-                            ]
-                        },
-                        options: {
-                            ...commonOptions,
-                            scales: {
-                                ...commonOptions.scales,
-                                y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'TH/s', color: '#b0b0b0' } }
+                    const commonOptions = {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: { 
+                                position: 'top',
+                                labels: { color: '#e0e0e0', font: { family: 'Inter', size: 12 } } 
+                            },
+                            tooltip: { 
+                                mode: 'index', intersect: false,
+                                backgroundColor: '#1e1e1e', titleColor: '#ffffff', bodyColor: '#e0e0e0', borderColor: '#333', borderWidth: 1
                             }
-                        }
-                    });
-                }
-
-                // Price Chart
-                const priceCtx = document.getElementById('priceChart');
-                if (priceCtx) {
-                    new Chart(priceCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Market Price',
-                                    data: historyData.map(d => d.price),
-                                    borderColor: '#ffb74d',
-                                    backgroundColor: 'rgba(255, 183, 77, 0.1)',
-                                    fill: true,
-                                    tension: 0.3,
-                                    pointRadius: 2
-                                },
-                                {
-                                    label: 'Hashvalue',
-                                    data: historyData.map(d => d.hashvalue),
-                                    borderColor: '#f44336',
-                                    borderDash: [2, 2],
-                                    fill: false,
-                                    tension: 0,
-                                    pointRadius: 0
-                                },
-                                {
-                                    label: 'Active Bid',
-                                    data: historyData.map(d => d.active_bid),
-                                    borderColor: '#4caf50',
-                                    borderWidth: 2,
-                                    fill: false,
-                                    tension: 0.3,
-                                    pointRadius: 1
-                                }
-                            ]
                         },
-                        options: {
-                            ...commonOptions,
-                            scales: {
-                                ...commonOptions.scales,
-                                y: { ...commonOptions.scales.y, beginAtZero: false, title: { display: true, text: 'sat/PH/Day', color: '#b0b0b0' } }
+                        scales: {
+                            x: { ticks: { color: '#b0b0b0', maxRotation: 45, minRotation: 45 }, grid: { color: '#333' } },
+                            y: { ticks: { color: '#b0b0b0' }, grid: { color: '#333' } }
+                        }
+                    };
+
+                    // Destroy old charts to prevent ghosting
+                    Object.values(charts).forEach(c => c.destroy());
+                    charts = {};
+
+                    // 1. Hashrate Performance
+                    const oceanData = historyData.map(d => d.ocean);
+                    const hashrateCtx = document.getElementById('hashrateChart');
+                    if (hashrateCtx) {
+                        charts.hashrate = new Chart(hashrateCtx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    { label: 'Ocean Actual', data: oceanData, borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3, pointRadius: 1 },
+                                    { label: 'MA 1d', data: movingAverage(oceanData, 288), borderColor: '#81c784', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
+                                    { label: 'MA 10d', data: movingAverage(oceanData, 2880), borderColor: '#ffd54f', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
+                                    { label: 'MA 30d', data: movingAverage(oceanData, 8640), borderColor: '#ff8a65', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
+                                    { label: 'Target', data: historyData.map(d => d.target), borderColor: '#bb86fc', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 },
+                                    { label: 'Braiins Reported', data: historyData.map(d => d.braiins), borderColor: '#03dac6', fill: false, tension: 0.3, pointRadius: 1 }
+                                ]
+                            },
+                            options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'TH/s', color: '#b0b0b0' } } } }
+                        });
+                    }
+
+                    // 2. Price Trend (Auto-scaling)
+                    const priceCtx = document.getElementById('priceChart');
+                    if (priceCtx) {
+                        const prices = historyData.map(d => d.price).filter(v => v !== null);
+                        const hashvalues = historyData.map(d => d.hashvalue).filter(v => v !== null);
+                        const activeBids = historyData.map(d => d.active_bid).filter(v => v !== null);
+                        const allPrices = [...prices, ...hashvalues, ...activeBids];
+                        
+                        let minP = Math.min(...allPrices);
+                        let maxP = Math.max(...allPrices);
+                        const padding = (maxP - minP) * 0.1 || 1000;
+
+                        charts.price = new Chart(priceCtx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    { label: 'Market Price', data: historyData.map(d => d.price), borderColor: '#ffb74d', backgroundColor: 'rgba(255, 183, 77, 0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+                                    { label: 'Hashvalue', data: historyData.map(d => d.hashvalue), borderColor: '#f44336', borderDash: [2, 2], fill: false, tension: 0, pointRadius: 0 },
+                                    { label: 'Active Bid', data: historyData.map(d => d.active_bid), borderColor: '#4caf50', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 1 }
+                                ]
+                            },
+                            options: { 
+                                ...commonOptions, 
+                                scales: { 
+                                    ...commonOptions.scales, 
+                                    y: { 
+                                        ...commonOptions.scales.y, 
+                                        min: Math.floor(minP - padding),
+                                        max: Math.ceil(maxP + padding),
+                                        title: { display: true, text: 'sat/PH/Day', color: '#b0b0b0' } 
+                                    } 
+                                } 
                             }
-                        }
-                    });
-                }
+                        });
+                    }
 
-                // Quality Chart
-                const qualityCtx = document.getElementById('qualityChart');
-                if (qualityCtx) {
-                    new Chart(qualityCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Accepted/min',
-                                    data: historyData.map((d, i) => {
-                                        if (i === 0) return 0;
-                                        const diff = d.accepted - historyData[i-1].accepted;
-                                        const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
-                                        return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
-                                    }),
-                                    borderColor: '#4caf50',
-                                    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                                    fill: true,
-                                    yAxisID: 'y'
-                                },
-                                {
-                                    label: 'Rejected/min',
-                                    data: historyData.map((d, i) => {
-                                        if (i === 0) return 0;
-                                        const diff = d.rejected - historyData[i-1].rejected;
-                                        const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
-                                        return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
-                                    }),
-                                    borderColor: '#f44336',
-                                    backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                                    fill: true,
-                                    yAxisID: 'y'
-                                },
-                                {
-                                    label: 'Rejection Ratio',
-                                    data: historyData.map(d => {
-                                        const total = d.accepted + d.rejected;
-                                        return total > 0 ? (d.rejected / total) * 100 : 0;
-                                    }),
-                                    borderColor: '#ffeb3b',
-                                    borderWidth: 2,
-                                    pointRadius: 0,
-                                    fill: false,
-                                    yAxisID: 'y1'
-                                }
-                            ]
-                        },
-                        options: {
-                            ...commonOptions,
-                            scales: {
-                                ...commonOptions.scales,
-                                y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'Shares/min', color: '#b0b0b0' } },
-                                y1: {
-                                    position: 'right', beginAtZero: true, max: 100,
-                                    grid: { drawOnChartArea: false },
-                                    ticks: { color: '#ffeb3b', callback: (value) => value + '%' },
-                                    title: { display: true, text: 'Ratio (%)', color: '#ffeb3b' }
+                    // 3. Transmission Quality
+                    const qualityCtx = document.getElementById('qualityChart');
+                    if (qualityCtx) {
+                        charts.quality = new Chart(qualityCtx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    {
+                                        label: 'Accepted/min',
+                                        data: historyData.map((d, i) => {
+                                            if (i === 0) return 0;
+                                            const diff = d.accepted - historyData[i-1].accepted;
+                                            const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
+                                            return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
+                                        }),
+                                        borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.2)', fill: true, yAxisID: 'y'
+                                    },
+                                    {
+                                        label: 'Rejected/min',
+                                        data: historyData.map((d, i) => {
+                                            if (i === 0) return 0;
+                                            const diff = d.rejected - historyData[i-1].rejected;
+                                            const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
+                                            return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
+                                        }),
+                                        borderColor: '#f44336', backgroundColor: 'rgba(244, 67, 54, 0.2)', fill: true, yAxisID: 'y'
+                                    },
+                                    {
+                                        label: 'Rejection Ratio',
+                                        data: historyData.map(d => {
+                                            const total = d.accepted + d.rejected;
+                                            return total > 0 ? (d.rejected / total) * 100 : 0;
+                                        }),
+                                        borderColor: '#ffeb3b', borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y1'
+                                    }
+                                ]
+                            },
+                            options: {
+                                ...commonOptions,
+                                scales: {
+                                    ...commonOptions.scales,
+                                    y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'Shares/min', color: '#b0b0b0' } },
+                                    y1: { position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false }, ticks: { color: '#ffeb3b', callback: (v) => v + '%' }, title: { display: true, text: 'Ratio (%)', color: '#ffeb3b' } }
                                 }
                             }
-                        }
-                    });
-                }
+                        });
+                    }
 
-                // Reward Chart
-                const rewardCtx = document.getElementById('rewardChart');
-                if (rewardCtx) {
-                    new Chart(rewardCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Est. Rewards (Window)',
-                                    data: historyData.map(d => d.estimated_rewards),
-                                    borderColor: '#bb86fc',
-                                    backgroundColor: 'rgba(187, 134, 252, 0.1)',
-                                    fill: true,
-                                    yAxisID: 'y'
-                                },
-                                {
-                                    label: 'Est. Earnings (Next Block)',
-                                    data: historyData.map(d => d.next_block_earnings),
-                                    borderColor: '#03dac6',
-                                    fill: false,
-                                    yAxisID: 'y'
-                                },
-                                {
-                                    label: 'Shares in Window',
-                                    data: historyData.map(d => d.ocean_shares),
-                                    borderColor: '#ffb74d',
-                                    borderWidth: 1,
-                                    pointRadius: 0,
-                                    fill: false,
-                                    yAxisID: 'y1'
-                                }
-                            ]
-                        },
-                        options: {
-                            ...commonOptions,
-                            scales: {
-                                ...commonOptions.scales,
-                                y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'Sats', color: '#b0b0b0' } },
-                                y1: {
-                                    position: 'right', beginAtZero: true,
-                                    grid: { drawOnChartArea: false },
-                                    ticks: { color: '#ffb74d' },
-                                    title: { display: true, text: 'Shares', color: '#ffb74d' }
+                    // 4. Ocean Rewards
+                    const rewardCtx = document.getElementById('rewardChart');
+                    if (rewardCtx) {
+                        charts.reward = new Chart(rewardCtx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    { label: 'Est. Rewards (Window)', data: historyData.map(d => d.estimated_rewards), borderColor: '#bb86fc', backgroundColor: 'rgba(187, 134, 252, 0.1)', fill: true, yAxisID: 'y' },
+                                    { label: 'Est. Earnings (Next Block)', data: historyData.map(d => d.next_block_earnings), borderColor: '#03dac6', fill: false, yAxisID: 'y' },
+                                    { label: 'Shares in Window', data: historyData.map(d => d.ocean_shares), borderColor: '#ffb74d', borderWidth: 1, pointRadius: 0, fill: false, yAxisID: 'y1' }
+                                ]
+                            },
+                            options: {
+                                ...commonOptions,
+                                scales: {
+                                    ...commonOptions.scales,
+                                    y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'Sats', color: '#b0b0b0' } },
+                                    y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: '#ffb74d' }, title: { display: true, text: 'Shares', color: '#ffb74d' } }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
-            }
 
-            // Initial load
-            initCharts();
-
-            // Re-initialize after HTMX swap
-            document.body.addEventListener('htmx:afterSettle', function(evt) {
-                if (evt.detail.target.id === 'dashboard-root') {
+                // Initialize on load
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initCharts);
+                } else {
                     initCharts();
                 }
-            });
+
+                // Re-initialize after HTMX swaps our charts
+                document.body.addEventListener('htmx:afterSettle', function(evt) {
+                    if (evt.detail.target.id === 'dashboard-content-all') {
+                        initCharts();
+                    }
+                });
+            })();
         </script>
     </div>
 </body>
