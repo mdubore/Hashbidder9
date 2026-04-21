@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 
 def _select_actual_ocean_hashrate_phs(stats: AccountStats) -> Decimal:
     """Select the Ocean hashrate used for dashboard "actual" metrics."""
-    for preferred_window in (
+    windows = {w.window: w.hashrate for w in stats.windows}
+    for preferred in (
         OceanTimeWindow.FIVE_MINUTES,
         OceanTimeWindow.TEN_MINUTES,
         OceanTimeWindow.DAY,
     ):
-        for window in stats.windows:
-            if window.window is preferred_window:
-                return window.hashrate.to(HashUnit.PH, TimeUnit.SECOND).value
+        if preferred in windows:
+            return windows[preferred].to(HashUnit.PH, TimeUnit.SECOND).value
     return Decimal(0)
 
 
