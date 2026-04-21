@@ -8,6 +8,8 @@ hashbidder is a small tool to manage bidding in [Braiins Hashpower](https://acad
 
 This project is a fork of and owes a big thank you to: [counterweightoperator/hashbidder](https://github.com/counterweightoperator/hashbidder).
 
+Created with gemini-3.1-pro-preview.
+
 ## Disclaimers
 
 hashbidder is severely under-tested and most probably has bugs. If used against the actual Braiins Hashpower market, it's going to use your money in a real market, and thus you can end up spending money in a way you don't want. You use hashbidder under at your own risk.
