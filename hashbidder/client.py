@@ -22,7 +22,7 @@ from hashbidder.domain.user_bid import BidId, BidStatus, ClOrderId, UserBid
 logger = logging.getLogger(__name__)
 
 # Use the full API path
-API_BASE = httpx.URL("https://hashpower.braiins.com/api/v1")
+API_BASE = httpx.URL("https://hashpower.braiins.com/v1")
 
 __all__ = [
     "API_BASE",

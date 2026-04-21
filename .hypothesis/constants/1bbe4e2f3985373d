@@ -1,0 +1,4 @@
+# file: /home/missydog/Desktop/Learnding/Tools/Hashbidder/hashbidder/ocean_client.py
+# hypothesis_version: 6.151.11
+
+[200, 429, 500, '1 hr', '10 min', '24 hrs', '3 hrs', '5 min', '60 sec', 'Unknown error', 'data', 'estimated_earnings', 'estimated_next_block', 'estimated_rewards', 'hashrate', 'hashrate_10800s', 'hashrate_1h', 'hashrate_24h', 'hashrate_300s', 'hashrate_3600s', 'hashrate_3h', 'hashrate_600s', 'hashrate_60s', 'hashrate_86400s', 'hashrate_day', 'next_block_earnings', 'result', 'rewards', 'shares', 'shares_in_window', 'shares_window', 'value', 'window']

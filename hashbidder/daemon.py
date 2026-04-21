@@ -1,6 +1,7 @@
 """Daemon orchestration logic for periodic reconciliation and metrics collection."""
 
 import asyncio
+import contextlib
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -128,11 +129,9 @@ async def _tick(
     except Exception as e:
         logger.error("Reconciliation failed: %s", e)
         # Try to log the raw stats to help debug "missing window" issues
-        try:
+        with contextlib.suppress(Exception):
             raw_stats = await ocean_client.get_account_stats(ocean_address)
             logger.debug("Ocean stats for debug: %s", raw_stats)
-        except Exception:
-            pass
 
     # 3. Final Metrics Collection
     braiins_hashrate_phs = Decimal(0)
@@ -170,7 +169,10 @@ async def _tick(
         ocean_next_block_earnings_sat = stats.next_block_earnings
         for window in stats.windows:
             # Switch to 5-minute for "Actual" pulses.
-            if window.window in (OceanTimeWindow.FIVE_MINUTES, OceanTimeWindow.TEN_MINUTES):
+            if window.window in (
+                OceanTimeWindow.FIVE_MINUTES,
+                OceanTimeWindow.TEN_MINUTES,
+            ):
                 ocean_hashrate_phs = window.hashrate.to(
                     HashUnit.PH, TimeUnit.SECOND
                 ).value

@@ -268,8 +268,8 @@ class TestSetBidsTarget:
         assert plan.cancels == ()
 
     @pytest.mark.asyncio
-    async def test_missing_24h_window_raises(self) -> None:
-        """Ocean stats without a 24h window raises ValueError."""
+    async def test_missing_24h_window_falls_back(self) -> None:
+        """Ocean stats without a 24h window falls back to available windows."""
         stats = AccountStats(
             windows=(
                 HashrateWindow(window=OceanTimeWindow.THREE_HOURS, hashrate=_ph_s("5")),
@@ -278,7 +278,7 @@ class TestSetBidsTarget:
         client = FakeClient(orderbook=_orderbook(served_price_sat=500_000))
         ocean = FakeOceanSource(account_stats=stats)
 
-        with pytest.raises(ValueError, match="24h window"):
-            await run_set_bids_target(
-                client, ocean, ADDRESS, _config("10"), dry_run=True
-            )
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
+        assert result.inputs.ocean_24h == _ph_s("5")

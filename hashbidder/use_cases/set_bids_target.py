@@ -1,13 +1,16 @@
 """Target-hashrate set-bids use case."""
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from hashbidder.bid_runner import SetBidsResult, reconcile
 from hashbidder.client import HashpowerClient
 from hashbidder.config import SetBidsConfig, TargetHashrateConfig
 from hashbidder.domain.btc_address import BtcAddress
-from hashbidder.domain.hashrate import Hashrate, HashratePrice
+from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
+from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.ocean_client import OceanSource, OceanTimeWindow
 from hashbidder.target_hashrate import (
     BidWithCooldown,
@@ -49,7 +52,7 @@ async def _ocean_24h(ocean: OceanSource, address: BtcAddress) -> Hashrate:
     if stats.windows:
         return stats.windows[0].hashrate
     logger.warning("Ocean stats response did not include any hashrate windows")
-    return Hashrate(0, HashUnit.PH, TimeUnit.SECOND)
+    return Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
 
 
 async def run_set_bids_target(

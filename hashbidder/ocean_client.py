@@ -88,23 +88,29 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
     logger.debug("Parsing Ocean JSON: %s", data)
     windows: list[HashrateWindow] = []
 
+    # Search for stats in the response - Ocean API v1 uses 'result'
+    stats_source = data
+    if "result" in data and isinstance(data["result"], dict):
+        stats_source = data["result"]
+    elif "data" in data and isinstance(data["data"], dict):
+        stats_source = data["data"]
+
     # Map API keys to internal enum members.
+    # The API uses seconds: 86400s (24h), 10800s (3h), 3600s (1h),
+    # 600s (10m), 300s (5m), 60s (1m)
     mapping = {
-        "24h": OceanTimeWindow.DAY,
-        "3h": OceanTimeWindow.THREE_HOURS,
-        "1h": OceanTimeWindow.ONE_HOUR,
-        "15m": OceanTimeWindow.TEN_MINUTES,
-        "5m": OceanTimeWindow.FIVE_MINUTES,
+        "hashrate_86400s": OceanTimeWindow.DAY,
+        "hashrate_10800s": OceanTimeWindow.THREE_HOURS,
+        "hashrate_3600s": OceanTimeWindow.ONE_HOUR,
+        "hashrate_600s": OceanTimeWindow.TEN_MINUTES,
+        "hashrate_300s": OceanTimeWindow.FIVE_MINUTES,
+        "hashrate_60s": OceanTimeWindow.SIXTY_SECONDS,
+        # Legacy/Other keys
         "hashrate_24h": OceanTimeWindow.DAY,
         "hashrate_3h": OceanTimeWindow.THREE_HOURS,
         "hashrate_1h": OceanTimeWindow.ONE_HOUR,
         "hashrate_day": OceanTimeWindow.DAY,
     }
-
-    # Search for stats in the response
-    stats_source = data
-    if "data" in data and isinstance(data["data"], dict):
-        stats_source = data["data"]
 
     # Check for nested hashrate object
     hr_source = stats_source
@@ -126,19 +132,17 @@ def _parse_json(data: dict[str, Any]) -> AccountStats:
             )
             windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
 
-    # Fallback: if no windows found, try the top level again with hashrate_ prefix
+    # Fallback: search for keys anywhere in stats_source if not found yet
     if not windows:
         for key, window_enum in mapping.items():
-            if not key.startswith("hashrate_"):
-                alt_key = f"hashrate_{key}"
-                val = stats_source.get(alt_key)
-                if val is not None:
-                    hashrate = Hashrate(
-                        value=Decimal(str(val)),
-                        hash_unit=HashUnit.H,
-                        time_unit=TimeUnit.SECOND,
-                    )
-                    windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
+            val = stats_source.get(key)
+            if val is not None:
+                hashrate = Hashrate(
+                    value=Decimal(str(val)),
+                    hash_unit=HashUnit.H,
+                    time_unit=TimeUnit.SECOND,
+                )
+                windows.append(HashrateWindow(window=window_enum, hashrate=hashrate))
 
     # Extract rewards/shares
     rewards_source = stats_source
