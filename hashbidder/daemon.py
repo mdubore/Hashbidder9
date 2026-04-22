@@ -43,7 +43,14 @@ async def _tick(
 ) -> MetricRow:
     """Perform a single reconciliation and metrics collection tick."""
     # 1. Load Config
-    config = load_config(config_path)
+    config = None
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        logger.warning(
+            "Bid config not found at %s; skipping reconciliation for this tick.",
+            config_path,
+        )
 
     # 2. Run Reconciliation (if in target-hashrate mode)
     bids_created = 0
