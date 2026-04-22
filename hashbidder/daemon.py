@@ -8,7 +8,6 @@ from decimal import Decimal
 from pathlib import Path
 
 from hashbidder import use_cases
-from hashbidder.bid_runner import ActionStatus
 from hashbidder.broadcast_hub import BroadcastHub
 from hashbidder.client import BidStatus, HashpowerClient
 from hashbidder.config import TargetHashrateConfig, load_config
@@ -18,67 +17,28 @@ from hashbidder.domain.hashrate import HashUnit
 from hashbidder.domain.time_unit import TimeUnit
 from hashbidder.mempool_client import MempoolSource
 from hashbidder.metrics import MetricRow, MetricsRepo
-from hashbidder.ocean_client import AccountStats, OceanSource, OceanTimeWindow
+from hashbidder.ocean_client import OceanSource, OceanTimeWindow
 
 logger = logging.getLogger(__name__)
 
 
-def _select_actual_ocean_hashrate_phs(stats: AccountStats) -> Decimal:
-    """Select the Ocean hashrate used for dashboard "actual" metrics."""
+def _select_actual_ocean_hashrate_phs(stats: any) -> Decimal:
+    """Select the best window for 'actual' hashrate, preferring 5m."""
+    # API uses seconds: 86400s (24h), 10800s (3h), 3600s (1h), 600s (10m), 300s (5m), 60s (1m)
+    # We prefer the smallest window that is likely to be stable.
     windows = {w.window: w.hashrate for w in stats.windows}
-    for preferred in (
+
+    for win in [
         OceanTimeWindow.FIVE_MINUTES,
         OceanTimeWindow.TEN_MINUTES,
+        OceanTimeWindow.ONE_HOUR,
+        OceanTimeWindow.THREE_HOURS,
         OceanTimeWindow.DAY,
-    ):
-        if preferred in windows:
-            return windows[preferred].to(HashUnit.PH, TimeUnit.SECOND).value
+    ]:
+        if win in windows:
+            return windows[win].to(HashUnit.PH, TimeUnit.SECOND).value
+
     return Decimal(0)
-
-
-async def daemon_loop(
-    config_path: Path,
-    braiins_client: HashpowerClient,
-    ocean_client: OceanSource,
-    mempool_client: MempoolSource,
-    metrics_repo: MetricsRepo,
-    ocean_address: BtcAddress,
-    interval_seconds: int = 300,
-    hub: BroadcastHub | None = None,
-) -> None:
-    """Run the non-interactive bid-reconciliation and metrics-collection loop.
-
-    Args:
-        config_path: Path to the TOML bid config file.
-        braiins_client: The hashpower market client to use.
-        ocean_client: The Ocean data source to use.
-        mempool_client: The mempool data source to use.
-        metrics_repo: The repository to store metrics in.
-        ocean_address: The Bitcoin address to monitor for Ocean metrics.
-        interval_seconds: How often to run the loop (default 300 seconds).
-        hub: Optional broadcast hub for SSE updates.
-    """
-    logger.info("Starting daemon loop with interval=%ds", interval_seconds)
-    while True:
-        tick_start = datetime.now(UTC)
-        try:
-            row = await _tick(
-                config_path=config_path,
-                braiins_client=braiins_client,
-                ocean_client=ocean_client,
-                mempool_client=mempool_client,
-                metrics_repo=metrics_repo,
-                ocean_address=ocean_address,
-            )
-            if hub and row:
-                hub.publish(row)
-        except Exception:
-            logger.exception("Unexpected error in daemon loop")
-
-        # Wait for the next interval
-        elapsed = (datetime.now(UTC) - tick_start).total_seconds()
-        sleep_time = max(0, interval_seconds - elapsed)
-        await asyncio.sleep(sleep_time)
 
 
 async def _tick(
@@ -88,56 +48,38 @@ async def _tick(
     mempool_client: MempoolSource,
     metrics_repo: MetricsRepo,
     ocean_address: BtcAddress,
-) -> MetricRow | None:
-    """Execute a single tick: metrics collection then reconciliation."""
-    # 1. Setup & Config
-    braiins_connected = False
-    ocean_connected = False
-    mempool_connected = False
+) -> MetricRow:
+    """Perform a single reconciliation and metrics collection tick."""
+    # 1. Load Config
+    config = load_config(config_path)
 
-    target_hashrate_phs = None
-    needed_hashrate_phs = None
-    market_price_sat = None
+    # 2. Run Reconciliation (if in target-hashrate mode)
     bids_created = 0
     bids_edited = 0
     bids_cancelled = 0
+    target_hashrate_phs = None
+    needed_hashrate_phs = None
+    market_price_sat = None
 
-    try:
-        config = load_config(config_path)
-    except Exception as e:
-        logger.error("Failed to load config: %s", e)
-        return None
-
-    # 2. Reconcile
     try:
         if isinstance(config, TargetHashrateConfig):
-            res = await use_cases.run_set_bids_target(
+            result = await use_cases.run_set_bids_target(
                 client=braiins_client,
                 ocean=ocean_client,
                 address=ocean_address,
                 config=config,
                 dry_run=False,
             )
-            set_bids_result = res.set_bids_result
-            target_hashrate_phs = res.inputs.target.to(
+            target_hashrate_phs = config.target_hashrate.to(
                 HashUnit.PH, TimeUnit.SECOND
             ).value
-            needed_hashrate_phs = res.inputs.needed.to(
+            needed_hashrate_phs = result.inputs.needed.to(
                 HashUnit.PH, TimeUnit.SECOND
             ).value
-            market_price_sat = int(res.inputs.price.to(HashUnit.PH, TimeUnit.DAY).sats)
-            ocean_connected = True
-        else:
-            set_bids_result = await use_cases.run_set_bids(
-                client=braiins_client,
-                config=config,
-                dry_run=False,
-            )
-        braiins_connected = True
+            market_price_sat = int(result.inputs.price.sats)
 
-        if set_bids_result.execution:
-            for outcome in set_bids_result.execution.outcomes:
-                if outcome.status == ActionStatus.SUCCEEDED:
+            for outcome in result.set_bids_result.outcomes:
+                if outcome.status.name == "SUCCEEDED":
                     if isinstance(outcome.action, CreateAction):
                         bids_created += 1
                     elif isinstance(outcome.action, EditAction):
@@ -170,7 +112,9 @@ async def _tick(
                 BidStatus.CREATED,
                 BidStatus.PAUSED,
             ):
-                active_bid_price_sat = int(bid.price.to(HashUnit.PH, TimeUnit.DAY).sats)
+                active_bid_price_sat = int(
+                    bid.price.to(HashUnit.PH, TimeUnit.DAY).sats
+                )
 
             # Use Delivered Hashrate (Averaged) for the primary Braiins line.
             # Use Current Speed (Momentary) if you wanted to see the jitter.
@@ -184,9 +128,11 @@ async def _tick(
                 braiins_shares_accepted += bid.shares_accepted
             if bid.shares_rejected is not None:
                 braiins_shares_rejected += bid.shares_rejected
+
         braiins_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Braiins metrics: %s", e)
+        braiins_connected = False
 
     ocean_hashrate_phs = Decimal(0)
     ocean_shares_window = None
@@ -194,13 +140,14 @@ async def _tick(
     ocean_next_block_earnings_sat = None
     try:
         stats = await ocean_client.get_account_stats(ocean_address)
+        ocean_hashrate_phs = _select_actual_ocean_hashrate_phs(stats)
         ocean_shares_window = stats.shares_window
         ocean_estimated_rewards_sat = stats.estimated_rewards
         ocean_next_block_earnings_sat = stats.next_block_earnings
-        ocean_hashrate_phs = _select_actual_ocean_hashrate_phs(stats)
         ocean_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Ocean metrics: %s", e)
+        ocean_connected = False
 
     hashvalue_sat = None
     try:
@@ -209,15 +156,16 @@ async def _tick(
         mempool_connected = True
     except Exception as e:
         logger.warning("Failed to fetch Mempool metrics: %s", e)
+        mempool_connected = False
 
     balance_sat = None
     try:
         balance = await braiins_client.get_account_balance()
-        balance_sat = balance.available_sat
+        balance_sat = int(balance.available_sat)
     except Exception as e:
         logger.warning("Failed to fetch balance: %s", e)
 
-    # 4. Record Metrics
+    # 4. Persistence
     row = MetricRow(
         timestamp=int(datetime.now(UTC).timestamp()),
         braiins_hashrate_phs=braiins_hashrate_phs,
@@ -258,3 +206,33 @@ async def _tick(
         f"{balance_sat}" if balance_sat is not None else "N/A",
     )
     return row
+
+
+async def daemon_loop(
+    config_path: Path,
+    braiins_client: HashpowerClient,
+    ocean_client: OceanSource,
+    mempool_client: MempoolSource,
+    metrics_repo: MetricsRepo,
+    ocean_address: BtcAddress,
+    interval_seconds: int = 300,
+    hub: BroadcastHub | None = None,
+) -> None:
+    """Continuously run reconciliation and collect metrics."""
+    logger.info("Starting daemon loop with interval=%ds", interval_seconds)
+    while True:
+        try:
+            row = await _tick(
+                config_path=config_path,
+                braiins_client=braiins_client,
+                ocean_client=ocean_client,
+                mempool_client=mempool_client,
+                metrics_repo=metrics_repo,
+                ocean_address=ocean_address,
+            )
+            if hub:
+                hub.publish(row)
+        except Exception:
+            logger.exception("Unexpected error in daemon loop")
+
+        await asyncio.sleep(interval_seconds)

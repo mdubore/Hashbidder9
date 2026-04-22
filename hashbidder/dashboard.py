@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -16,16 +17,16 @@ from typing import Annotated, Any
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from hashbidder.broadcast_hub import BroadcastHub
+from hashbidder.broadcast_hub import OVERFLOW_SIGNAL, BroadcastHub
 from hashbidder.client import API_BASE, BraiinsClient
 from hashbidder.config import ExplicitBidsModel, TargetHashrateModel
 from hashbidder.daemon import daemon_loop
 from hashbidder.domain.btc_address import BtcAddress
 from hashbidder.mempool_client import DEFAULT_MEMPOOL_URL, MempoolClient
-from hashbidder.metrics import MetricsRepo
+from hashbidder.metrics import MetricRow, MetricsRepo
 from hashbidder.ocean_client import DEFAULT_OCEAN_URL, OceanClient
 
 logger = logging.getLogger(__name__)
@@ -45,16 +46,20 @@ def _resolve_mempool_url() -> httpx.URL:
     return httpx.URL(env_url) if env_url else DEFAULT_MEMPOOL_URL
 
 
+# Global hub instance
+broadcast_hub = BroadcastHub()
+repo = MetricsRepo()
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage lifecycle of the dashboard and its background tasks."""
     load_dotenv()
     await repo.init_db()
 
-    # Initialize app state
-    broadcast_hub = BroadcastHub()
-    app.state.broadcast_hub = broadcast_hub
+    # Wire dependencies into app state
     app.state.metrics_repo = repo
+    app.state.broadcast_hub = broadcast_hub
 
     # Resolve OCEAN_ADDRESS
     address_str = os.environ.get("OCEAN_ADDRESS")
@@ -103,9 +108,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Hashbidder Dashboard", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-repo = MetricsRepo()
 
 BIDS_CONFIG_PATH = Path(os.environ.get("HASHBIDDER_CONFIG_PATH", "bids.toml"))
+
+
+def serialize_metric_row(row: MetricRow) -> dict[str, Any]:
+    """JSON-safe metric row serialization."""
+    return {k: (str(v) if isinstance(v, Decimal) else v) for k, v in vars(row).items()}
 
 
 def save_config_to_toml(data: dict[str, Any], path: Path) -> None:
@@ -159,6 +168,61 @@ async def index(request: Request) -> HTMLResponse:
         logger.error("Error rendering dashboard: %s", e)
         logger.error(traceback.format_exc())
         return HTMLResponse(content=f"Internal Server Error: {e}", status_code=500)
+
+
+@app.get("/stream")
+async def stream(request: Request, since: int | None = None) -> StreamingResponse:
+    """SSE endpoint for real-time metric updates."""
+    hub = request.app.state.broadcast_hub
+    repo = request.app.state.metrics_repo
+
+    async def event_generator() -> AsyncIterator[str]:
+        q = await hub.subscribe()
+        last_id = request.headers.get("Last-Event-ID")
+        # since=0 means replay nothing. since > 0 or Last-Event-ID replays.
+        cursor = max(int(last_id) if last_id else 0, since or 0)
+
+        try:
+            # 1. Replay historical ticks
+            if cursor > 0:
+                history = await repo.get_history(cursor + 1)
+                for row in history:
+                    yield (
+                        f"id: {row.timestamp}\n"
+                        f"event: metric_row\n"
+                        f"data: {json.dumps(serialize_metric_row(row))}\n\n"
+                    )
+
+            # 2. Live bridge
+            while True:
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=15.0)
+                    if msg == OVERFLOW_SIGNAL:
+                        yield "event: overflow\ndata: reset\n\n"
+                        continue
+
+                    if not isinstance(msg, MetricRow):
+                        continue
+
+                    yield (
+                        f"id: {msg.timestamp}\n"
+                        f"event: metric_row\n"
+                        f"data: {json.dumps(serialize_metric_row(msg))}\n\n"
+                    )
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+        finally:
+            hub.unsubscribe(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.get("/settings", response_class=HTMLResponse)
