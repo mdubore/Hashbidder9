@@ -68,7 +68,9 @@ async def _tick(
             needed_hashrate_phs = result.inputs.needed.to(
                 HashUnit.PH, TimeUnit.SECOND
             ).value
-            market_price_sat = int(result.inputs.price.sats)
+            market_price_sat = int(
+                result.inputs.price.to(HashUnit.PH, TimeUnit.DAY).sats
+            )
 
             if result.set_bids_result.execution:
                 for outcome in result.set_bids_result.execution.outcomes:
