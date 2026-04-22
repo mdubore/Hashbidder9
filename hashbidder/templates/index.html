@@ -224,7 +224,7 @@
                         ocean10m: parseNullablePhs(row.ocean_hashrate_600s_phs),
                         ocean24h: parseNullablePhs(row.ocean_hashrate_86400s_phs),
                         braiinsCurrent: parseNullablePhs(row.braiins_current_speed_phs),
-                        braiinsDelivered: parseNullablePhs(row.braiins_delivered_hashrate_phs),
+                        braiinsSpeedLimit: parseNullablePhs(row.braiins_speed_limit_phs),
                         target: row.target_hashrate_phs !== null && row.target_hashrate_phs !== undefined ? parseFloat(row.target_hashrate_phs) * 1000 : null,
                         price: row.market_price_sat,
                         accepted: row.braiins_shares_accepted || 0,
@@ -311,8 +311,8 @@
                             datasets: [
                                 { label: 'Ocean Actual (60s)', data: [], borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.10)', fill: true, tension: 0.25, pointRadius: 1 },
                                 { label: 'Ocean 10m', data: [], borderColor: '#81c784', fill: false, tension: 0.25, pointRadius: 1 },
-                                { label: 'Braiins Current', data: [], borderColor: '#03dac6', fill: false, tension: 0.25, pointRadius: 1 },
-                                { label: 'Braiins Delivered Avg', data: [], borderColor: '#26c6da', borderDash: [4, 3], fill: false, tension: 0.2, pointRadius: 1 },
+                                { label: 'Braiins Estimated Speed', data: [], borderColor: '#03dac6', fill: false, tension: 0.25, pointRadius: 1 },
+                                { label: 'Braiins Speed Limit', data: [], borderColor: '#26c6da', borderDash: [4, 3], fill: false, tension: 0.2, pointRadius: 1 },
                                 { label: 'Target', data: [], borderColor: '#bb86fc', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 }
                             ]
                         },
@@ -442,7 +442,7 @@
                     const diagnosticOcean60s = carryForward(historyData.map(d => d.ocean60s));
                     const diagnosticOcean10m = carryForward(historyData.map(d => d.ocean10m));
                     const diagnosticBraiinsCurrent = carryForward(historyData.map(d => d.braiinsCurrent));
-                    const diagnosticBraiinsDelivered = carryForward(historyData.map(d => d.braiinsDelivered));
+                    const diagnosticBraiinsSpeedLimit = carryForward(historyData.map(d => d.braiinsSpeedLimit));
                     const trendOcean24h = carryForward(historyData.map(d => d.ocean24h));
                     const targetSeries = historyData.map(d => d.target);
 
@@ -450,7 +450,7 @@
                     charts.hashrateDiagnostic.data.datasets[0].data = diagnosticOcean60s;
                     charts.hashrateDiagnostic.data.datasets[1].data = diagnosticOcean10m;
                     charts.hashrateDiagnostic.data.datasets[2].data = diagnosticBraiinsCurrent;
-                    charts.hashrateDiagnostic.data.datasets[3].data = diagnosticBraiinsDelivered;
+                    charts.hashrateDiagnostic.data.datasets[3].data = diagnosticBraiinsSpeedLimit;
                     charts.hashrateDiagnostic.data.datasets[4].data = targetSeries;
 
                     charts.hashrateTrend.data.labels = labels;

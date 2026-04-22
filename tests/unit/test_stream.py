@@ -28,6 +28,7 @@ def metric_row() -> MetricRow:
         ocean_hashrate_600s_phs=Decimal("1.02"),
         ocean_hashrate_86400s_phs=Decimal("0.98"),
         braiins_current_speed_phs=Decimal("1.08"),
+        braiins_speed_limit_phs=Decimal("1.15"),
         braiins_delivered_hashrate_phs=Decimal("1.01"),
         target_hashrate_phs=Decimal("1.0"),
         needed_hashrate_phs=Decimal("0.0"),
@@ -68,6 +69,7 @@ async def test_serialize_metric_row(metric_row: MetricRow) -> None:
     assert serialized["ocean_hashrate_600s_phs"] == "1.02"
     assert serialized["ocean_hashrate_86400s_phs"] == "0.98"
     assert serialized["braiins_current_speed_phs"] == "1.08"
+    assert serialized["braiins_speed_limit_phs"] == "1.15"
     assert serialized["braiins_delivered_hashrate_phs"] == "1.01"
 
 
@@ -112,6 +114,7 @@ async def test_stream_replay_sequencing(
     assert '"braiins_hashrate_phs": "1.0"' in chunk
     assert '"ocean_hashrate_60s_phs": "1.05"' in chunk
     assert '"braiins_current_speed_phs": "1.08"' in chunk
+    assert '"braiins_speed_limit_phs": "1.15"' in chunk
     await response.body_iterator.aclose()
 
 

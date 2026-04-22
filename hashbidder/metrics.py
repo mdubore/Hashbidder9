@@ -22,6 +22,7 @@ class MetricRow:
     ocean_hashrate_600s_phs: Decimal | None = None
     ocean_hashrate_86400s_phs: Decimal | None = None
     braiins_current_speed_phs: Decimal | None = None
+    braiins_speed_limit_phs: Decimal | None = None
     braiins_delivered_hashrate_phs: Decimal | None = None
     # New Fields
     target_hashrate_phs: Decimal | None = None
@@ -72,6 +73,7 @@ class MetricsRepo:
                     ocean_hashrate_600s_phs TEXT,
                     ocean_hashrate_86400s_phs TEXT,
                     braiins_current_speed_phs TEXT,
+                    braiins_speed_limit_phs TEXT,
                     braiins_delivered_hashrate_phs TEXT,
                     target_hashrate_phs TEXT,
                     needed_hashrate_phs TEXT,
@@ -102,6 +104,7 @@ class MetricsRepo:
                 ("ocean_hashrate_600s_phs", "TEXT"),
                 ("ocean_hashrate_86400s_phs", "TEXT"),
                 ("braiins_current_speed_phs", "TEXT"),
+                ("braiins_speed_limit_phs", "TEXT"),
                 ("braiins_delivered_hashrate_phs", "TEXT"),
             ]
             for col_name, col_type in columns:
@@ -125,13 +128,14 @@ class MetricsRepo:
                 "braiins_connected, ocean_connected, mempool_connected, "
                 "ocean_hashrate_60s_phs, ocean_hashrate_600s_phs, "
                 "ocean_hashrate_86400s_phs, braiins_current_speed_phs, "
-                "braiins_delivered_hashrate_phs, target_hashrate_phs, "
+                "braiins_speed_limit_phs, braiins_delivered_hashrate_phs, "
+                "target_hashrate_phs, "
                 "needed_hashrate_phs, market_price_sat, bids_active, "
                 "bids_created, bids_edited, bids_cancelled, balance_sat, "
                 "braiins_shares_accepted, braiins_shares_rejected, "
                 "ocean_shares_window, ocean_estimated_rewards_sat, "
                 "ocean_next_block_earnings_sat, hashvalue_sat, active_bid_price_sat"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                 "?, ?, ?, ?, ?, ?, ?)"
             )
             await db.execute(
@@ -154,6 +158,9 @@ class MetricsRepo:
                     else None,
                     str(row.braiins_current_speed_phs)
                     if row.braiins_current_speed_phs is not None
+                    else None,
+                    str(row.braiins_speed_limit_phs)
+                    if row.braiins_speed_limit_phs is not None
                     else None,
                     str(row.braiins_delivered_hashrate_phs)
                     if row.braiins_delivered_hashrate_phs is not None
@@ -216,6 +223,9 @@ class MetricsRepo:
                     else None,
                     braiins_current_speed_phs=Decimal(r["braiins_current_speed_phs"])
                     if r["braiins_current_speed_phs"] is not None
+                    else None,
+                    braiins_speed_limit_phs=Decimal(r["braiins_speed_limit_phs"])
+                    if r["braiins_speed_limit_phs"] is not None
                     else None,
                     braiins_delivered_hashrate_phs=Decimal(
                         r["braiins_delivered_hashrate_phs"]

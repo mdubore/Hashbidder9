@@ -91,11 +91,13 @@ async def _tick(
     # 3. Final Metrics Collection
     braiins_hashrate_phs = Decimal(0)
     braiins_current_speed_phs = Decimal(0)
+    braiins_speed_limit_phs = Decimal(0)
     braiins_delivered_hashrate_phs = Decimal(0)
     bids_active = 0
     braiins_shares_accepted = 0
     braiins_shares_rejected = 0
     active_bid_price_sat = None
+    current_bids = ()
     saw_braiins_current_speed = False
     saw_braiins_delivered = False
     try:
@@ -127,6 +129,10 @@ async def _tick(
                     HashUnit.PH, TimeUnit.SECOND
                 ).value
                 saw_braiins_current_speed = True
+
+            braiins_speed_limit_phs += bid.speed_limit_ph.to(
+                HashUnit.PH, TimeUnit.SECOND
+            ).value
 
             if bid.shares_accepted is not None:
                 braiins_shares_accepted += bid.shares_accepted
@@ -195,6 +201,7 @@ async def _tick(
         braiins_current_speed_phs=braiins_current_speed_phs
         if saw_braiins_current_speed
         else None,
+        braiins_speed_limit_phs=braiins_speed_limit_phs if current_bids else None,
         braiins_delivered_hashrate_phs=braiins_delivered_hashrate_phs
         if saw_braiins_delivered
         else None,

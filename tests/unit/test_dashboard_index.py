@@ -40,6 +40,7 @@ async def test_index_embeds_parseable_history_json(
             ocean_hashrate_600s_phs=Decimal("1.250"),
             ocean_hashrate_86400s_phs=Decimal("0.950"),
             braiins_current_speed_phs=Decimal("1.210"),
+            braiins_speed_limit_phs=Decimal("1.130"),
             braiins_delivered_hashrate_phs=Decimal("1.040"),
             target_hashrate_phs=Decimal("1.000"),
             needed_hashrate_phs=Decimal("0.000"),
@@ -72,3 +73,7 @@ async def test_index_embeds_parseable_history_json(
     payload = json.loads(match.group(1))
     assert payload[-1]["ocean_hashrate_60s_phs"] == "1.585"
     assert payload[-1]["braiins_current_speed_phs"] == "1.210"
+    assert payload[-1]["braiins_speed_limit_phs"] == "1.130"
+    assert "Braiins Estimated Speed" in response.text
+    assert "Braiins Speed Limit" in response.text
+    assert "Braiins Delivered Avg" not in response.text

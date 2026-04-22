@@ -34,6 +34,7 @@ async def test_metrics_repo_flow() -> None:
             ocean_hashrate_600s_phs=Decimal("0.45"),
             ocean_hashrate_86400s_phs=Decimal("0.40"),
             braiins_current_speed_phs=Decimal("0.47"),
+            braiins_speed_limit_phs=Decimal("0.49"),
             braiins_delivered_hashrate_phs=Decimal("0.44"),
             target_hashrate_phs=Decimal("5.0"),
             needed_hashrate_phs=Decimal("3.0"),
@@ -60,6 +61,7 @@ async def test_metrics_repo_flow() -> None:
             ocean_hashrate_600s_phs=Decimal("0.41"),
             ocean_hashrate_86400s_phs=Decimal("0.39"),
             braiins_current_speed_phs=Decimal("0.48"),
+            braiins_speed_limit_phs=Decimal("0.51"),
             braiins_delivered_hashrate_phs=None,
             target_hashrate_phs=Decimal("5.0"),
             needed_hashrate_phs=Decimal("2.9"),
@@ -85,6 +87,7 @@ async def test_metrics_repo_flow() -> None:
         assert history[0] == row1
         assert history[1] == row2
         assert history[0].ocean_hashrate_60s_phs == Decimal("0.50")
+        assert history[0].braiins_speed_limit_phs == Decimal("0.49")
         assert history[1].braiins_delivered_hashrate_phs is None
 
         # Test filtering by timestamp
@@ -156,6 +159,7 @@ async def test_metrics_repo_migration() -> None:
             ocean_hashrate_600s_phs=Decimal("0.45"),
             ocean_hashrate_86400s_phs=Decimal("0.40"),
             braiins_current_speed_phs=Decimal("0.47"),
+            braiins_speed_limit_phs=Decimal("0.49"),
             braiins_delivered_hashrate_phs=None,
             braiins_shares_accepted=1000,
             braiins_shares_rejected=10,
@@ -168,6 +172,7 @@ async def test_metrics_repo_migration() -> None:
         assert len(history) == 1
         assert history[0].braiins_shares_accepted == 1000
         assert history[0].ocean_hashrate_600s_phs == Decimal("0.45")
+        assert history[0].braiins_speed_limit_phs == Decimal("0.49")
         assert history[0].braiins_delivered_hashrate_phs is None
 
     finally:
