@@ -224,8 +224,23 @@
                 }
 
                 function computeRatioAxisMax(ratios) {
+                    if (!ratios || ratios.length === 0) return 5;
                     const maxRatio = Math.max(0, ...ratios);
-                    return Math.min(100, Math.max(5, Math.ceil(maxRatio * 1.1)));
+                    const calculated = Math.min(100, Math.max(5, Math.ceil(maxRatio * 1.1)));
+                    return isNaN(calculated) ? 5 : calculated;
+                }
+
+                function collectDefinedValues(points, keys) {
+                    const values = [];
+                    points.forEach((point) => {
+                        keys.forEach((key) => {
+                            const value = point[key];
+                            if (value !== null && value !== undefined) {
+                                values.push(value);
+                            }
+                        });
+                    });
+                    return values;
                 }
 
                 function mapRowToPoint(row) {
@@ -434,6 +449,11 @@
                 }
 
                 function rebuildCharts(duration) {
+                    if (historyData.length === 0) {
+                        console.log("No data to rebuild charts");
+                        return;
+                    }
+                    console.log("Rebuilding charts with " + historyData.length + " points");
                     const labels = buildLabels(historyData);
 
                     const diagnosticOcean60s = carryForward(historyData.map(d => d.ocean60s));
@@ -460,9 +480,7 @@
                     charts.price.data.datasets[0].data = historyData.map(d => d.price);
                     charts.price.data.datasets[1].data = historyData.map(d => d.hashvalue);
                     charts.price.data.datasets[2].data = historyData.map(d => d.active_bid);
-                    const allPrices = historyData
-                        .flatMap(d => [d.price, d.hashvalue, d.active_bid])
-                        .filter(v => v !== null);
+                    const allPrices = collectDefinedValues(historyData, ['price', 'hashvalue', 'active_bid']);
                     if (allPrices.length > 0) {
                         const minP = Math.min(...allPrices);
                         const maxP = Math.max(...allPrices);
@@ -500,27 +518,38 @@
                     charts.reward.data.datasets[1].data = historyData.map(d => d.next_block_earnings);
                     charts.reward.data.datasets[2].data = historyData.map(d => d.ocean_shares);
 
-                    Object.values(charts).forEach((chart) => {
+                    for (const chartName in charts) {
+                        const chart = charts[chartName];
                         chart.options.animation.duration = duration;
                         chart.update();
-                    });
+                    }
                 }
 
                 function initializeDashboard() {
+                    console.log("Initializing dashboard...");
                     const jsonEl = document.getElementById('history-json');
-                    if (!jsonEl) return;
-
-                    const rawData = JSON.parse(jsonEl.textContent);
-                    historyData = rawData.map(mapRowToPoint);
-                    lastSeenTimestamp = historyData.length > 0
-                        ? historyData[historyData.length - 1].timestampRaw
-                        : 0;
-
-                    initializeCharts();
-                    if (historyData.length > 0) {
-                        updateStatusHeader(historyData[historyData.length - 1]);
+                    if (!jsonEl) {
+                        console.error("history-json element not found");
+                        return;
                     }
-                    rebuildCharts(0);
+
+                    try {
+                        const rawData = JSON.parse(jsonEl.textContent);
+                        console.log("Parsed " + rawData.length + " historical rows");
+                        historyData = rawData.map(mapRowToPoint);
+                        lastSeenTimestamp = historyData.length > 0
+                            ? historyData[historyData.length - 1].timestampRaw
+                            : 0;
+
+                        initializeCharts();
+                        if (historyData.length > 0) {
+                            updateStatusHeader(historyData[historyData.length - 1]);
+                        }
+                        rebuildCharts(0);
+                        console.log("Dashboard initialized successfully");
+                    } catch (e) {
+                        console.error("Error initializing dashboard:", e);
+                    }
                 }
 
                 function updateDashboard(point) {
