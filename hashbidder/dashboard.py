@@ -204,12 +204,13 @@ async def stream(request: Request, since: int | None = None) -> StreamingRespons
                     if not isinstance(msg, MetricRow):
                         continue
 
+                    await asyncio.sleep(0.01)
                     yield (
                         f"id: {msg.timestamp}\n"
-                        f"event: metric_row\n"
+                        "event: metric_row\n"
                         f"data: {json.dumps(serialize_metric_row(msg))}\n\n"
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ": heartbeat\n\n"
         finally:
             hub.unsubscribe(q)

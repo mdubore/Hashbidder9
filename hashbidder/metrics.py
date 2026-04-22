@@ -18,6 +18,11 @@ class MetricRow:
     braiins_connected: bool
     ocean_connected: bool
     mempool_connected: bool
+    ocean_hashrate_60s_phs: Decimal | None = None
+    ocean_hashrate_600s_phs: Decimal | None = None
+    ocean_hashrate_86400s_phs: Decimal | None = None
+    braiins_current_speed_phs: Decimal | None = None
+    braiins_delivered_hashrate_phs: Decimal | None = None
     # New Fields
     target_hashrate_phs: Decimal | None = None
     needed_hashrate_phs: Decimal | None = None
@@ -63,6 +68,11 @@ class MetricsRepo:
                     braiins_connected INTEGER,
                     ocean_connected INTEGER,
                     mempool_connected INTEGER,
+                    ocean_hashrate_60s_phs TEXT,
+                    ocean_hashrate_600s_phs TEXT,
+                    ocean_hashrate_86400s_phs TEXT,
+                    braiins_current_speed_phs TEXT,
+                    braiins_delivered_hashrate_phs TEXT,
                     target_hashrate_phs TEXT,
                     needed_hashrate_phs TEXT,
                     market_price_sat INTEGER,
@@ -88,6 +98,11 @@ class MetricsRepo:
                 ("ocean_next_block_earnings_sat", "INTEGER"),
                 ("hashvalue_sat", "INTEGER"),
                 ("active_bid_price_sat", "INTEGER"),
+                ("ocean_hashrate_60s_phs", "TEXT"),
+                ("ocean_hashrate_600s_phs", "TEXT"),
+                ("ocean_hashrate_86400s_phs", "TEXT"),
+                ("braiins_current_speed_phs", "TEXT"),
+                ("braiins_delivered_hashrate_phs", "TEXT"),
             ]
             for col_name, col_type in columns:
                 with contextlib.suppress(aiosqlite.OperationalError):
@@ -105,8 +120,19 @@ class MetricsRepo:
         """
         async with aiosqlite.connect(self.db_path) as db:
             query = (
-                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO metrics ("
+                "timestamp, braiins_hashrate_phs, ocean_hashrate_phs, "
+                "braiins_connected, ocean_connected, mempool_connected, "
+                "ocean_hashrate_60s_phs, ocean_hashrate_600s_phs, "
+                "ocean_hashrate_86400s_phs, braiins_current_speed_phs, "
+                "braiins_delivered_hashrate_phs, target_hashrate_phs, "
+                "needed_hashrate_phs, market_price_sat, bids_active, "
+                "bids_created, bids_edited, bids_cancelled, balance_sat, "
+                "braiins_shares_accepted, braiins_shares_rejected, "
+                "ocean_shares_window, ocean_estimated_rewards_sat, "
+                "ocean_next_block_earnings_sat, hashvalue_sat, active_bid_price_sat"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?, ?, ?, ?)"
             )
             await db.execute(
                 query,
@@ -117,6 +143,21 @@ class MetricsRepo:
                     int(row.braiins_connected),
                     int(row.ocean_connected),
                     int(row.mempool_connected),
+                    str(row.ocean_hashrate_60s_phs)
+                    if row.ocean_hashrate_60s_phs is not None
+                    else None,
+                    str(row.ocean_hashrate_600s_phs)
+                    if row.ocean_hashrate_600s_phs is not None
+                    else None,
+                    str(row.ocean_hashrate_86400s_phs)
+                    if row.ocean_hashrate_86400s_phs is not None
+                    else None,
+                    str(row.braiins_current_speed_phs)
+                    if row.braiins_current_speed_phs is not None
+                    else None,
+                    str(row.braiins_delivered_hashrate_phs)
+                    if row.braiins_delivered_hashrate_phs is not None
+                    else None,
                     str(row.target_hashrate_phs)
                     if row.target_hashrate_phs is not None
                     else None,
@@ -164,6 +205,23 @@ class MetricsRepo:
                     braiins_connected=bool(r["braiins_connected"]),
                     ocean_connected=bool(r["ocean_connected"]),
                     mempool_connected=bool(r["mempool_connected"]),
+                    ocean_hashrate_60s_phs=Decimal(r["ocean_hashrate_60s_phs"])
+                    if r["ocean_hashrate_60s_phs"] is not None
+                    else None,
+                    ocean_hashrate_600s_phs=Decimal(r["ocean_hashrate_600s_phs"])
+                    if r["ocean_hashrate_600s_phs"] is not None
+                    else None,
+                    ocean_hashrate_86400s_phs=Decimal(r["ocean_hashrate_86400s_phs"])
+                    if r["ocean_hashrate_86400s_phs"] is not None
+                    else None,
+                    braiins_current_speed_phs=Decimal(r["braiins_current_speed_phs"])
+                    if r["braiins_current_speed_phs"] is not None
+                    else None,
+                    braiins_delivered_hashrate_phs=Decimal(
+                        r["braiins_delivered_hashrate_phs"]
+                    )
+                    if r["braiins_delivered_hashrate_phs"] is not None
+                    else None,
                     target_hashrate_phs=Decimal(r["target_hashrate_phs"])
                     if r["target_hashrate_phs"] is not None
                     else None,

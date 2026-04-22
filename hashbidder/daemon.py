@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-
 from hashbidder import use_cases
 from hashbidder.broadcast_hub import BroadcastHub
 from hashbidder.client import BidStatus, HashpowerClient
@@ -22,23 +21,16 @@ from hashbidder.ocean_client import OceanSource, OceanTimeWindow
 logger = logging.getLogger(__name__)
 
 
-def _select_actual_ocean_hashrate_phs(stats: any) -> Decimal:
-    """Select the best window for 'actual' hashrate, preferring 5m."""
-    # API uses seconds: 86400s (24h), 10800s (3h), 3600s (1h), 600s (10m), 300s (5m), 60s (1m)
-    # We prefer the smallest window that is likely to be stable.
-    windows = {w.window: w.hashrate for w in stats.windows}
-
-    for win in [
-        OceanTimeWindow.FIVE_MINUTES,
-        OceanTimeWindow.TEN_MINUTES,
-        OceanTimeWindow.ONE_HOUR,
-        OceanTimeWindow.THREE_HOURS,
-        OceanTimeWindow.DAY,
-    ]:
-        if win in windows:
-            return windows[win].to(HashUnit.PH, TimeUnit.SECOND).value
-
-    return Decimal(0)
+def _select_ocean_hashrate_phs(
+    stats: OceanSource,
+    window: OceanTimeWindow,
+) -> Decimal | None:
+    """Return a specific Ocean hashrate window without fallback."""
+    for item in stats.windows:
+        if item.window is window:
+            result = item.hashrate.to(HashUnit.PH, TimeUnit.SECOND).value
+            return result if isinstance(result, Decimal) else Decimal(str(result))
+    return None
 
 
 async def _tick(
@@ -78,14 +70,15 @@ async def _tick(
             ).value
             market_price_sat = int(result.inputs.price.sats)
 
-            for outcome in result.set_bids_result.outcomes:
-                if outcome.status.name == "SUCCEEDED":
-                    if isinstance(outcome.action, CreateAction):
-                        bids_created += 1
-                    elif isinstance(outcome.action, EditAction):
-                        bids_edited += 1
-                    elif isinstance(outcome.action, CancelAction):
-                        bids_cancelled += 1
+            if result.set_bids_result.execution:
+                for outcome in result.set_bids_result.execution.outcomes:
+                    if outcome.status.name == "SUCCEEDED":
+                        if isinstance(outcome.action, CreateAction):
+                            bids_created += 1
+                        elif isinstance(outcome.action, EditAction):
+                            bids_edited += 1
+                        elif isinstance(outcome.action, CancelAction):
+                            bids_cancelled += 1
     except Exception as e:
         logger.error("Reconciliation failed: %s", e)
         # Try to log the raw stats to help debug "missing window" issues
@@ -95,10 +88,14 @@ async def _tick(
 
     # 3. Final Metrics Collection
     braiins_hashrate_phs = Decimal(0)
+    braiins_current_speed_phs = Decimal(0)
+    braiins_delivered_hashrate_phs = Decimal(0)
     bids_active = 0
     braiins_shares_accepted = 0
     braiins_shares_rejected = 0
     active_bid_price_sat = None
+    saw_braiins_current_speed = False
+    saw_braiins_delivered = False
     try:
         current_bids = await braiins_client.get_current_bids()
         bids_active = len(current_bids)
@@ -112,17 +109,22 @@ async def _tick(
                 BidStatus.CREATED,
                 BidStatus.PAUSED,
             ):
-                active_bid_price_sat = int(
-                    bid.price.to(HashUnit.PH, TimeUnit.DAY).sats
-                )
+                active_bid_price_sat = int(bid.price.to(HashUnit.PH, TimeUnit.DAY).sats)
 
-            # Use Delivered Hashrate (Averaged) for the primary Braiins line.
-            # Use Current Speed (Momentary) if you wanted to see the jitter.
-            # We'll use delivered_hashrate as it's more stable for the dashboard.
             if bid.delivered_hashrate:
                 braiins_hashrate_phs += bid.delivered_hashrate.to(
                     HashUnit.PH, TimeUnit.SECOND
                 ).value
+                braiins_delivered_hashrate_phs += bid.delivered_hashrate.to(
+                    HashUnit.PH, TimeUnit.SECOND
+                ).value
+                saw_braiins_delivered = True
+
+            if bid.current_speed:
+                braiins_current_speed_phs += bid.current_speed.to(
+                    HashUnit.PH, TimeUnit.SECOND
+                ).value
+                saw_braiins_current_speed = True
 
             if bid.shares_accepted is not None:
                 braiins_shares_accepted += bid.shares_accepted
@@ -135,12 +137,24 @@ async def _tick(
         braiins_connected = False
 
     ocean_hashrate_phs = Decimal(0)
+    ocean_hashrate_60s_phs = None
+    ocean_hashrate_600s_phs = None
+    ocean_hashrate_86400s_phs = None
     ocean_shares_window = None
     ocean_estimated_rewards_sat = None
     ocean_next_block_earnings_sat = None
     try:
         stats = await ocean_client.get_account_stats(ocean_address)
-        ocean_hashrate_phs = _select_actual_ocean_hashrate_phs(stats)
+        ocean_hashrate_60s_phs = _select_ocean_hashrate_phs(
+            stats, OceanTimeWindow.SIXTY_SECONDS
+        )
+        ocean_hashrate_600s_phs = _select_ocean_hashrate_phs(
+            stats, OceanTimeWindow.TEN_MINUTES
+        )
+        ocean_hashrate_86400s_phs = _select_ocean_hashrate_phs(
+            stats, OceanTimeWindow.DAY
+        )
+        ocean_hashrate_phs = ocean_hashrate_60s_phs or Decimal(0)
         ocean_shares_window = stats.shares_window
         ocean_estimated_rewards_sat = stats.estimated_rewards
         ocean_next_block_earnings_sat = stats.next_block_earnings
@@ -173,6 +187,15 @@ async def _tick(
         braiins_connected=braiins_connected,
         ocean_connected=ocean_connected,
         mempool_connected=mempool_connected,
+        ocean_hashrate_60s_phs=ocean_hashrate_60s_phs,
+        ocean_hashrate_600s_phs=ocean_hashrate_600s_phs,
+        ocean_hashrate_86400s_phs=ocean_hashrate_86400s_phs,
+        braiins_current_speed_phs=braiins_current_speed_phs
+        if saw_braiins_current_speed
+        else None,
+        braiins_delivered_hashrate_phs=braiins_delivered_hashrate_phs
+        if saw_braiins_delivered
+        else None,
         target_hashrate_phs=target_hashrate_phs,
         needed_hashrate_phs=needed_hashrate_phs,
         market_price_sat=market_price_sat,

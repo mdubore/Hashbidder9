@@ -14,6 +14,7 @@ from hashbidder.client import (
     BraiinsClient,
     ClOrderId,
     Upstream,
+    _parse_user_bid,
 )
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
@@ -36,6 +37,54 @@ UPSTREAM = Upstream(
     url=StratumUrl("stratum+tcp://pool.example.com:3333"),
     identity="worker1",
 )
+
+
+def _raw_bid_item(
+    *,
+    avg_speed_ph: str | None = None,
+    delivered_hr_ph: str | None = None,
+) -> dict[str, object]:
+    state_estimate: dict[str, object] = {"progress_pct": "10", "amount_remaining_sat": 90_000}
+    if avg_speed_ph is not None:
+        state_estimate["avg_speed_ph"] = avg_speed_ph
+
+    counters_committed: dict[str, object] = {}
+    if delivered_hr_ph is not None:
+        counters_committed["delivered_hr_ph"] = delivered_hr_ph
+
+    return {
+        "bid": {
+            "id": "B42",
+            "price_sat": 500_000,
+            "speed_limit_ph": "5.0",
+            "amount_sat": 100_000,
+            "status": "BID_STATUS_ACTIVE",
+            "last_updated": "2026-04-12T10:30:00+00:00",
+            "dest_upstream": {
+                "url": "stratum+tcp://pool.example.com:3333",
+                "identity": "worker1",
+            },
+        },
+        "state_estimate": state_estimate,
+        "counters_committed": counters_committed,
+    }
+
+
+def test_parse_user_bid_keeps_current_and_delivered_separate() -> None:
+    """Delivered hashrate should not overwrite current speed."""
+    bid = _parse_user_bid(_raw_bid_item(avg_speed_ph="1.25", delivered_hr_ph="1.10"))
+    assert bid.current_speed is not None
+    assert bid.current_speed.value == Decimal("1.25")
+    assert bid.delivered_hashrate is not None
+    assert bid.delivered_hashrate.value == Decimal("1.10")
+
+
+def test_parse_user_bid_does_not_fallback_delivered_to_current() -> None:
+    """Missing delivered hashrate should remain missing."""
+    bid = _parse_user_bid(_raw_bid_item(avg_speed_ph="1.25"))
+    assert bid.current_speed is not None
+    assert bid.current_speed.value == Decimal("1.25")
+    assert bid.delivered_hashrate is None
 
 
 @pytest.mark.asyncio

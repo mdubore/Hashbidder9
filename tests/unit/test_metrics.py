@@ -30,6 +30,11 @@ async def test_metrics_repo_flow() -> None:
             braiins_connected=True,
             ocean_connected=True,
             mempool_connected=True,
+            ocean_hashrate_60s_phs=Decimal("0.50"),
+            ocean_hashrate_600s_phs=Decimal("0.45"),
+            ocean_hashrate_86400s_phs=Decimal("0.40"),
+            braiins_current_speed_phs=Decimal("0.47"),
+            braiins_delivered_hashrate_phs=Decimal("0.44"),
             target_hashrate_phs=Decimal("5.0"),
             needed_hashrate_phs=Decimal("3.0"),
             market_price_sat=100,
@@ -51,6 +56,11 @@ async def test_metrics_repo_flow() -> None:
             braiins_connected=True,
             ocean_connected=False,
             mempool_connected=True,
+            ocean_hashrate_60s_phs=None,
+            ocean_hashrate_600s_phs=Decimal("0.41"),
+            ocean_hashrate_86400s_phs=Decimal("0.39"),
+            braiins_current_speed_phs=Decimal("0.48"),
+            braiins_delivered_hashrate_phs=None,
             target_hashrate_phs=Decimal("5.0"),
             needed_hashrate_phs=Decimal("2.9"),
             market_price_sat=101,
@@ -74,6 +84,8 @@ async def test_metrics_repo_flow() -> None:
         assert len(history) == 2
         assert history[0] == row1
         assert history[1] == row2
+        assert history[0].ocean_hashrate_60s_phs == Decimal("0.50")
+        assert history[1].braiins_delivered_hashrate_phs is None
 
         # Test filtering by timestamp
         history_filtered = await repo.get_history(since_timestamp=1050)
@@ -140,6 +152,11 @@ async def test_metrics_repo_migration() -> None:
             braiins_connected=True,
             ocean_connected=True,
             mempool_connected=True,
+            ocean_hashrate_60s_phs=Decimal("0.50"),
+            ocean_hashrate_600s_phs=Decimal("0.45"),
+            ocean_hashrate_86400s_phs=Decimal("0.40"),
+            braiins_current_speed_phs=Decimal("0.47"),
+            braiins_delivered_hashrate_phs=None,
             braiins_shares_accepted=1000,
             braiins_shares_rejected=10,
             ocean_shares_window=500,
@@ -150,6 +167,8 @@ async def test_metrics_repo_migration() -> None:
         history = await repo.get_history(since_timestamp=1000)
         assert len(history) == 1
         assert history[0].braiins_shares_accepted == 1000
+        assert history[0].ocean_hashrate_600s_phs == Decimal("0.45")
+        assert history[0].braiins_delivered_hashrate_phs is None
 
     finally:
         if os.path.exists(db_path):

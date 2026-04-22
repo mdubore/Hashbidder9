@@ -131,8 +131,12 @@
         <div id="dashboard-content">
             <div class="dashboard-grid">
                 <div class="chart-container">
-                    <h3>Hashrate Performance (TH/s)</h3>
-                    <canvas id="hashrateChart"></canvas>
+                    <h3>Hashrate Diagnostics (TH/s)</h3>
+                    <canvas id="hashrateDiagnosticChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Hashrate Trend (TH/s)</h3>
+                    <canvas id="hashrateTrendChart"></canvas>
                 </div>
                 <div class="chart-container">
                     <h3>Market Price Trend (sat/PH/Day)</h3>
@@ -157,6 +161,11 @@
                     "timestamp": {{ row.timestamp }},
                     "braiins_hashrate_phs": "{{ row.braiins_hashrate_phs }}",
                     "ocean_hashrate_phs": "{{ row.ocean_hashrate_phs }}",
+                    "ocean_hashrate_60s_phs": {{ '"' ~ row.ocean_hashrate_60s_phs ~ '"' if row.ocean_hashrate_60s_phs is not none else 'null' }},
+                    "ocean_hashrate_600s_phs": {{ '"' ~ row.ocean_hashrate_600s_phs ~ '"' if row.ocean_hashrate_600s_phs is not none else 'null' }},
+                    "ocean_hashrate_86400s_phs": {{ '"' ~ row.ocean_hashrate_86400s_phs ~ '"' if row.ocean_hashrate_86400s_phs is not none else 'null' }},
+                    "braiins_current_speed_phs": {{ '"' ~ row.braiins_current_speed_phs ~ '"' if row.braiins_current_speed_phs is not none else 'null' }},
+                    "braiins_delivered_hashrate_phs": {{ '"' ~ row.braiins_delivered_hashrate_phs ~ '"' if row.braiins_delivered_hashrate_phs is not none else 'null' }},
                     "braiins_connected": {{ 'true' if row.braiins_connected else 'false' }},
                     "ocean_connected": {{ 'true' if row.ocean_connected else 'false' }},
                     "mempool_connected": {{ 'true' if row.mempool_connected else 'false' }},
@@ -183,22 +192,52 @@
                 let lastSeenTimestamp = {{ history[-1].timestamp if history else 0 }};
                 let sseSource = null;
 
-                function movingAverage(data, period) {
-                    return data.map((val, index, arr) => {
+                function movingAverageNullable(data, period) {
+                    return data.map((_, index, arr) => {
                         const start = Math.max(0, index - period + 1);
-                        const subset = arr.slice(start, index + 1);
+                        const subset = arr.slice(start, index + 1).filter(v => v !== null);
+                        if (subset.length === 0) return null;
                         const sum = subset.reduce((a, b) => a + b, 0);
                         return sum / subset.length;
                     });
+                }
+
+                function carryForward(values) {
+                    let last = null;
+                    return values.map((value) => {
+                        if (value !== null) {
+                            last = value;
+                        }
+                        return last;
+                    });
+                }
+
+                function parseNullablePhs(value) {
+                    return value === null ? null : parseFloat(value) * 1000;
+                }
+
+                function buildLabels(points) {
+                    return points.map((point) =>
+                        point.timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                        point.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    );
+                }
+
+                function computeRatioAxisMax(ratios) {
+                    const maxRatio = Math.max(0, ...ratios);
+                    return Math.min(100, Math.max(5, Math.ceil(maxRatio * 1.1)));
                 }
 
                 function mapRowToPoint(row) {
                     return {
                         timestamp: new Date(row.timestamp * 1000),
                         timestampRaw: row.timestamp,
-                        ocean: parseFloat(row.ocean_hashrate_phs || 0) * 1000,
-                        target: row.target_hashrate_phs ? parseFloat(row.target_hashrate_phs) * 1000 : null,
-                        braiins: parseFloat(row.braiins_hashrate_phs || 0) * 1000,
+                        ocean60s: parseNullablePhs(row.ocean_hashrate_60s_phs),
+                        ocean10m: parseNullablePhs(row.ocean_hashrate_600s_phs),
+                        ocean24h: parseNullablePhs(row.ocean_hashrate_86400s_phs),
+                        braiinsCurrent: parseNullablePhs(row.braiins_current_speed_phs),
+                        braiinsDelivered: parseNullablePhs(row.braiins_delivered_hashrate_phs),
+                        target: row.target_hashrate_phs !== null && row.target_hashrate_phs !== undefined ? parseFloat(row.target_hashrate_phs) * 1000 : null,
                         price: row.market_price_sat,
                         accepted: row.braiins_shares_accepted || 0,
                         rejected: row.braiins_shares_rejected || 0,
@@ -207,20 +246,41 @@
                         next_block_earnings: row.ocean_next_block_earnings_sat || 0,
                         hashvalue: row.hashvalue_sat,
                         active_bid: row.active_bid_price_sat,
-                        balance: row.balance_sat
+                        balance: row.balance_sat,
+                        braiinsConnected: row.braiins_connected,
+                        oceanConnected: row.ocean_connected,
+                        mempoolConnected: row.mempool_connected
                     };
                 }
 
-                function initCharts() {
-                    const jsonEl = document.getElementById('history-json');
-                    if (!jsonEl) return;
-                    
-                    const rawData = JSON.parse(jsonEl.textContent);
-                    historyData = rawData.map(mapRowToPoint);
+                function updateChip(id, connected) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.className = `status-chip ${connected ? 'status-green' : 'status-red'}`;
+                    }
+                }
 
-                    const labels = historyData.map(d => d.timestamp.toLocaleTimeString());
-                    
-                    const commonOptions = {
+                function updateStatusHeader(point) {
+                    if (!point) return;
+                    updateChip('status-braiins', point.braiinsConnected);
+                    updateChip('status-ocean', point.oceanConnected);
+                    updateChip('status-mempool', point.mempoolConnected);
+
+                    const balanceEl = document.getElementById('balance-value');
+                    if (balanceEl) {
+                        balanceEl.textContent = point.balance !== null && point.balance !== undefined
+                            ? `${point.balance} sats`
+                            : 'N/A';
+                    }
+
+                    const updatedEl = document.getElementById('last-updated-time');
+                    if (updatedEl) {
+                        updatedEl.textContent = point.timestamp.toLocaleTimeString();
+                    }
+                }
+
+                function getCommonOptions() {
+                    return {
                         responsive: true,
                         maintainAspectRatio: false,
                         animation: { duration: 0 },
@@ -250,35 +310,51 @@
                             }
                         }
                     };
+                }
 
-                    // Hashrate Chart
-                    const hashrateCtx = document.getElementById('hashrateChart').getContext('2d');
-                    charts.hashrate = new Chart(hashrateCtx, {
+                function initializeCharts() {
+                    const commonOptions = getCommonOptions();
+
+                    const diagnosticCtx = document.getElementById('hashrateDiagnosticChart').getContext('2d');
+                    charts.hashrateDiagnostic = new Chart(diagnosticCtx, {
                         type: 'line',
                         data: {
-                            labels: labels,
+                            labels: [],
                             datasets: [
-                                { label: 'Ocean Actual', data: historyData.map(d => d.ocean), borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3, pointRadius: 1 },
-                                { label: 'MA 1d', data: movingAverage(historyData.map(d => d.ocean), 288), borderColor: '#81c784', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                { label: 'MA 10d', data: movingAverage(historyData.map(d => d.ocean), 2880), borderColor: '#ffd54f', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                { label: 'MA 30d', data: movingAverage(historyData.map(d => d.ocean), 8640), borderColor: '#ff8a65', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
-                                { label: 'Target', data: historyData.map(d => d.target), borderColor: '#bb86fc', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 },
-                                { label: 'Braiins Reported', data: historyData.map(d => d.braiins), borderColor: '#03dac6', fill: false, tension: 0.3, pointRadius: 1 }
+                                { label: 'Ocean Actual (60s)', data: [], borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.10)', fill: true, tension: 0.25, pointRadius: 1 },
+                                { label: 'Ocean 10m', data: [], borderColor: '#81c784', fill: false, tension: 0.25, pointRadius: 1 },
+                                { label: 'Braiins Current', data: [], borderColor: '#03dac6', fill: false, tension: 0.25, pointRadius: 1 },
+                                { label: 'Braiins Delivered Avg', data: [], borderColor: '#26c6da', borderDash: [4, 3], fill: false, tension: 0.2, pointRadius: 1 },
+                                { label: 'Target', data: [], borderColor: '#bb86fc', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 }
                             ]
                         },
                         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'TH/s', color: '#b0b0b0' } } } }
                     });
 
-                    // Price Chart
+                    const trendCtx = document.getElementById('hashrateTrendChart').getContext('2d');
+                    charts.hashrateTrend = new Chart(trendCtx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [
+                                { label: 'Ocean 24h', data: [], borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.10)', fill: true, tension: 0.25, pointRadius: 1 },
+                                { label: 'MA 10d', data: [], borderColor: '#ffd54f', fill: false, tension: 0.2, pointRadius: 0, borderWidth: 2 },
+                                { label: 'MA 30d', data: [], borderColor: '#ff8a65', fill: false, tension: 0.2, pointRadius: 0, borderWidth: 2 },
+                                { label: 'Target', data: [], borderColor: '#bb86fc', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 }
+                            ]
+                        },
+                        options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'TH/s', color: '#b0b0b0' } } } }
+                    });
+
                     const priceCtx = document.getElementById('priceChart').getContext('2d');
                     charts.price = new Chart(priceCtx, {
                         type: 'line',
                         data: {
-                            labels: labels,
+                            labels: [],
                             datasets: [
-                                { label: 'Market Price', data: historyData.map(d => d.price), borderColor: '#ffb74d', backgroundColor: 'rgba(255, 183, 77, 0.1)', fill: true, tension: 0.3, pointRadius: 2 },
-                                { label: 'Hashvalue', data: historyData.map(d => d.hashvalue), borderColor: '#f44336', borderDash: [2, 2], fill: false, tension: 0, pointRadius: 0 },
-                                { label: 'Active Bid', data: historyData.map(d => d.active_bid), borderColor: '#4caf50', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 1 }
+                                { label: 'Market Price', data: [], borderColor: '#ffb74d', backgroundColor: 'rgba(255, 183, 77, 0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+                                { label: 'Hashvalue', data: [], borderColor: '#f44336', borderDash: [2, 2], fill: false, tension: 0, pointRadius: 0 },
+                                { label: 'Active Bid', data: [], borderColor: '#4caf50', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 1 }
                             ]
                         },
                         options: { 
@@ -295,34 +371,21 @@
                     charts.quality = new Chart(qualityCtx, {
                         type: 'line',
                         data: {
-                            labels: labels,
+                            labels: [],
                             datasets: [
                                 {
                                     label: 'Accepted/min',
-                                    data: historyData.map((d, i) => {
-                                        if (i === 0) return 0;
-                                        const diff = d.accepted - historyData[i-1].accepted;
-                                        const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
-                                        return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
-                                    }),
+                                    data: [],
                                     borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.2)', fill: true, yAxisID: 'y'
                                 },
                                 {
                                     label: 'Rejected/min',
-                                    data: historyData.map((d, i) => {
-                                        if (i === 0) return 0;
-                                        const diff = d.rejected - historyData[i-1].rejected;
-                                        const timeDiffMin = (d.timestamp - historyData[i-1].timestamp) / 60000;
-                                        return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
-                                    }),
+                                    data: [],
                                     borderColor: '#f44336', backgroundColor: 'rgba(244, 67, 54, 0.2)', fill: true, yAxisID: 'y'
                                 },
                                 {
                                     label: 'Rejection Ratio',
-                                    data: historyData.map(d => {
-                                        const total = d.accepted + d.rejected;
-                                        return total > 0 ? (d.rejected / total) * 100 : 0;
-                                    }),
+                                    data: [],
                                     borderColor: '#ffeb3b', borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y1'
                                 }
                             ]
@@ -333,7 +396,7 @@
                                 ...commonOptions.scales,
                                 y: { ...commonOptions.scales.y, beginAtZero: true, title: { display: true, text: 'Shares/min', color: '#b0b0b0' } },
                                 y1: {
-                                    position: 'right', beginAtZero: true, max: 100,
+                                    position: 'right', beginAtZero: true, max: 5,
                                     grid: { drawOnChartArea: false },
                                     ticks: { color: '#ffeb3b', callback: (v) => v + '%' },
                                     title: { display: true, text: 'Ratio (%)', color: '#ffeb3b' }
@@ -347,11 +410,11 @@
                     charts.reward = new Chart(rewardCtx, {
                         type: 'line',
                         data: {
-                            labels: labels,
+                            labels: [],
                             datasets: [
-                                { label: 'Est. Rewards (Window)', data: historyData.map(d => d.estimated_rewards), borderColor: '#bb86fc', backgroundColor: 'rgba(187, 134, 252, 0.1)', fill: true, yAxisID: 'y' },
-                                { label: 'Est. Earnings (Next Block)', data: historyData.map(d => d.next_block_earnings), borderColor: '#03dac6', fill: false, yAxisID: 'y' },
-                                { label: 'Shares in Window', data: historyData.map(d => d.ocean_shares), borderColor: '#ffb74d', borderWidth: 1, pointRadius: 0, fill: false, yAxisID: 'y1' }
+                                { label: 'Est. Rewards (Window)', data: [], borderColor: '#bb86fc', backgroundColor: 'rgba(187, 134, 252, 0.1)', fill: true, yAxisID: 'y' },
+                                { label: 'Est. Earnings (Next Block)', data: [], borderColor: '#03dac6', fill: false, yAxisID: 'y' },
+                                { label: 'Shares in Window', data: [], borderColor: '#ffb74d', borderWidth: 1, pointRadius: 0, fill: false, yAxisID: 'y1' }
                             ]
                         },
                         options: {
@@ -370,39 +433,36 @@
                     });
                 }
 
-                function updateDashboard(point) {
-                    if (point.timestampRaw <= lastSeenTimestamp) return;
-                    lastSeenTimestamp = point.timestampRaw;
+                function rebuildCharts(duration) {
+                    const labels = buildLabels(historyData);
 
-                    // 1. DOM Updates
-                    const updateChip = (id, connected) => {
-                        const el = document.getElementById(id);
-                        if (el) el.className = `status-chip ${connected ? 'status-green' : 'status-red'}`;
-                    };
-                    // Note: row connections aren't in mapRowToPoint, we use the raw row for this in SSE handler
-                    
-                    document.getElementById('balance-value').textContent = (point.balance || 'N/A') + ' sats';
-                    document.getElementById('last-updated-time').textContent = point.timestamp.toLocaleTimeString();
+                    const diagnosticOcean60s = carryForward(historyData.map(d => d.ocean60s));
+                    const diagnosticOcean10m = carryForward(historyData.map(d => d.ocean10m));
+                    const diagnosticBraiinsCurrent = carryForward(historyData.map(d => d.braiinsCurrent));
+                    const diagnosticBraiinsDelivered = carryForward(historyData.map(d => d.braiinsDelivered));
+                    const trendOcean24h = carryForward(historyData.map(d => d.ocean24h));
+                    const targetSeries = historyData.map(d => d.target);
 
-                    // 2. History Data Maintenance
-                    historyData.push(point);
-                    if (historyData.length > 2016) historyData.shift();
+                    charts.hashrateDiagnostic.data.labels = labels;
+                    charts.hashrateDiagnostic.data.datasets[0].data = diagnosticOcean60s;
+                    charts.hashrateDiagnostic.data.datasets[1].data = diagnosticOcean10m;
+                    charts.hashrateDiagnostic.data.datasets[2].data = diagnosticBraiinsCurrent;
+                    charts.hashrateDiagnostic.data.datasets[3].data = diagnosticBraiinsDelivered;
+                    charts.hashrateDiagnostic.data.datasets[4].data = targetSeries;
 
-                    const labels = historyData.map(d => d.timestamp.toLocaleTimeString());
-                    const oceanData = historyData.map(d => d.ocean);
+                    charts.hashrateTrend.data.labels = labels;
+                    charts.hashrateTrend.data.datasets[0].data = trendOcean24h;
+                    charts.hashrateTrend.data.datasets[1].data = movingAverageNullable(trendOcean24h, 2880);
+                    charts.hashrateTrend.data.datasets[2].data = movingAverageNullable(trendOcean24h, 8640);
+                    charts.hashrateTrend.data.datasets[3].data = targetSeries;
 
-                    // 3. Update Chart 1: Hashrate
-                    charts.hashrate.data.labels = labels;
-                    charts.hashrate.data.datasets[0].data = oceanData;
-                    charts.hashrate.data.datasets[1].data = movingAverage(oceanData, 288);
-                    charts.hashrate.data.datasets[2].data = movingAverage(oceanData, 2880);
-                    charts.hashrate.data.datasets[3].data = movingAverage(oceanData, 8640);
-                    charts.hashrate.data.datasets[4].data = historyData.map(d => d.target);
-                    charts.hashrate.data.datasets[5].data = historyData.map(d => d.braiins);
-                    charts.hashrate.update();
-
-                    // 4. Update Chart 2: Price
-                    const allPrices = historyData.flatMap(d => [d.price, d.hashvalue, d.active_bid]).filter(v => v !== null);
+                    charts.price.data.labels = labels;
+                    charts.price.data.datasets[0].data = historyData.map(d => d.price);
+                    charts.price.data.datasets[1].data = historyData.map(d => d.hashvalue);
+                    charts.price.data.datasets[2].data = historyData.map(d => d.active_bid);
+                    const allPrices = historyData
+                        .flatMap(d => [d.price, d.hashvalue, d.active_bid])
+                        .filter(v => v !== null);
                     if (allPrices.length > 0) {
                         const minP = Math.min(...allPrices);
                         const maxP = Math.max(...allPrices);
@@ -410,40 +470,68 @@
                         charts.price.options.scales.y.min = Math.floor(minP - padding);
                         charts.price.options.scales.y.max = Math.ceil(maxP + padding);
                     }
-                    charts.price.data.labels = labels;
-                    charts.price.data.datasets[0].data = historyData.map(d => d.price);
-                    charts.price.data.datasets[1].data = historyData.map(d => d.hashvalue);
-                    charts.price.data.datasets[2].data = historyData.map(d => d.active_bid);
-                    charts.price.update();
 
-                    // 5. Update Chart 3: Quality
-                    charts.quality.data.labels = labels;
-                    charts.quality.data.datasets[0].data = historyData.map((d, i) => {
+                    const acceptedRates = historyData.map((d, i) => {
                         if (i === 0) return 0;
                         const prev = historyData[i-1];
                         const diff = d.accepted - prev.accepted;
                         const timeDiffMin = (d.timestamp - prev.timestamp) / 60000;
                         return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
                     });
-                    charts.quality.data.datasets[1].data = historyData.map((d, i) => {
+                    const rejectedRates = historyData.map((d, i) => {
                         if (i === 0) return 0;
                         const prev = historyData[i-1];
                         const diff = d.rejected - prev.rejected;
                         const timeDiffMin = (d.timestamp - prev.timestamp) / 60000;
                         return timeDiffMin > 0 ? Math.max(0, diff / timeDiffMin) : 0;
                     });
-                    charts.quality.data.datasets[2].data = historyData.map(d => {
+                    const rejectionRatios = historyData.map(d => {
                         const total = d.accepted + d.rejected;
                         return total > 0 ? (d.rejected / total) * 100 : 0;
                     });
-                    charts.quality.update();
+                    charts.quality.data.labels = labels;
+                    charts.quality.data.datasets[0].data = acceptedRates;
+                    charts.quality.data.datasets[1].data = rejectedRates;
+                    charts.quality.data.datasets[2].data = rejectionRatios;
+                    charts.quality.options.scales.y1.max = computeRatioAxisMax(rejectionRatios);
 
-                    // 6. Update Chart 4: Rewards
                     charts.reward.data.labels = labels;
                     charts.reward.data.datasets[0].data = historyData.map(d => d.estimated_rewards);
                     charts.reward.data.datasets[1].data = historyData.map(d => d.next_block_earnings);
                     charts.reward.data.datasets[2].data = historyData.map(d => d.ocean_shares);
-                    charts.reward.update();
+
+                    Object.values(charts).forEach((chart) => {
+                        chart.options.animation.duration = duration;
+                        chart.update();
+                    });
+                }
+
+                function initializeDashboard() {
+                    const jsonEl = document.getElementById('history-json');
+                    if (!jsonEl) return;
+
+                    const rawData = JSON.parse(jsonEl.textContent);
+                    historyData = rawData.map(mapRowToPoint);
+                    lastSeenTimestamp = historyData.length > 0
+                        ? historyData[historyData.length - 1].timestampRaw
+                        : 0;
+
+                    initializeCharts();
+                    if (historyData.length > 0) {
+                        updateStatusHeader(historyData[historyData.length - 1]);
+                    }
+                    rebuildCharts(0);
+                }
+
+                function updateDashboard(point) {
+                    if (point.timestampRaw <= lastSeenTimestamp) return;
+                    lastSeenTimestamp = point.timestampRaw;
+                    historyData.push(point);
+                    if (historyData.length > 2016) {
+                        historyData.shift();
+                    }
+                    updateStatusHeader(point);
+                    rebuildCharts(250);
                 }
 
                 function startSSE() {
@@ -453,17 +541,7 @@
                     sseSource = new EventSource(url);
 
                     sseSource.addEventListener('metric_row', (e) => {
-                        const row = JSON.parse(e.data);
-                        // Update status chips from raw row before mapping
-                        const updateChip = (id, connected) => {
-                            const el = document.getElementById(id);
-                            if (el) el.className = `status-chip ${connected ? 'status-green' : 'status-red'}`;
-                        };
-                        updateChip('status-braiins', row.braiins_connected);
-                        updateChip('status-ocean', row.ocean_connected);
-                        updateChip('status-mempool', row.mempool_connected);
-
-                        updateDashboard(mapRowToPoint(row));
+                        updateDashboard(mapRowToPoint(JSON.parse(e.data)));
                     });
 
                     sseSource.addEventListener('overflow', () => {
@@ -476,7 +554,7 @@
                     };
                 }
 
-                initCharts();
+                initializeDashboard();
                 startSSE();
             })();
         </script>
