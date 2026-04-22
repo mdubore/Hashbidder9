@@ -154,12 +154,14 @@ async def index(request: Request) -> HTMLResponse:
 
         # Extract current status (latest metric row)
         current_status = history[-1] if history else None
+        history_json = json.dumps([serialize_metric_row(row) for row in history])
 
         return templates.TemplateResponse(
             request=request,
             name="index.html",
             context={
                 "history": history,
+                "history_json": history_json,
                 "current_status": current_status,
                 "now": datetime.now(UTC),
             },

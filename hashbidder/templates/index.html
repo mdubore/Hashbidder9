@@ -155,34 +155,7 @@
 
         <!-- Data block for JS -->
         <script id="history-json" type="application/json">
-            [
-                {% for row in history %}
-                {
-                    "timestamp": {{ row.timestamp }},
-                    "braiins_hashrate_phs": "{{ row.braiins_hashrate_phs }}",
-                    "ocean_hashrate_phs": "{{ row.ocean_hashrate_phs }}",
-                    "ocean_hashrate_60s_phs": {{ '"' ~ row.ocean_hashrate_60s_phs ~ '"' if row.ocean_hashrate_60s_phs is not none else 'null' }},
-                    "ocean_hashrate_600s_phs": {{ '"' ~ row.ocean_hashrate_600s_phs ~ '"' if row.ocean_hashrate_600s_phs is not none else 'null' }},
-                    "ocean_hashrate_86400s_phs": {{ '"' ~ row.ocean_hashrate_86400s_phs ~ '"' if row.ocean_hashrate_86400s_phs is not none else 'null' }},
-                    "braiins_current_speed_phs": {{ '"' ~ row.braiins_current_speed_phs ~ '"' if row.braiins_current_speed_phs is not none else 'null' }},
-                    "braiins_delivered_hashrate_phs": {{ '"' ~ row.braiins_delivered_hashrate_phs ~ '"' if row.braiins_delivered_hashrate_phs is not none else 'null' }},
-                    "braiins_connected": {{ 'true' if row.braiins_connected else 'false' }},
-                    "ocean_connected": {{ 'true' if row.ocean_connected else 'false' }},
-                    "mempool_connected": {{ 'true' if row.mempool_connected else 'false' }},
-                    "target_hashrate_phs": {{ row.target_hashrate_phs if row.target_hashrate_phs is not none else 'null' }},
-                    "needed_hashrate_phs": {{ row.needed_hashrate_phs if row.needed_hashrate_phs is not none else 'null' }},
-                    "market_price_sat": {{ row.market_price_sat if row.market_price_sat is not none else 'null' }},
-                    "balance_sat": {{ row.balance_sat if row.balance_sat is not none else 'null' }},
-                    "braiins_shares_accepted": {{ row.braiins_shares_accepted if row.braiins_shares_accepted is not none else 0 }},
-                    "braiins_shares_rejected": {{ row.braiins_shares_rejected if row.braiins_shares_rejected is not none else 0 }},
-                    "ocean_shares_window": {{ row.ocean_shares_window if row.ocean_shares_window is not none else 0 }},
-                    "ocean_estimated_rewards_sat": {{ row.ocean_estimated_rewards_sat if row.ocean_estimated_rewards_sat is not none else 0 }},
-                    "ocean_next_block_earnings_sat": {{ row.ocean_next_block_earnings_sat if row.ocean_next_block_earnings_sat is not none else 0 }},
-                    "hashvalue_sat": {{ row.hashvalue_sat if row.hashvalue_sat is not none else 'null' }},
-                    "active_bid_price_sat": {{ row.active_bid_price_sat if row.active_bid_price_sat is not none else 'null' }}
-                }{{ "," if not loop.last }}
-                {% endfor %}
-            ]
+{{ history_json | safe }}
         </script>
 
         <script>
@@ -451,6 +424,16 @@
                 function rebuildCharts(duration) {
                     if (historyData.length === 0) {
                         console.log("No data to rebuild charts");
+                        return;
+                    }
+                    if (
+                        !charts.hashrateDiagnostic ||
+                        !charts.hashrateTrend ||
+                        !charts.price ||
+                        !charts.quality ||
+                        !charts.reward
+                    ) {
+                        console.warn("Charts not initialized; skipping rebuild");
                         return;
                     }
                     console.log("Rebuilding charts with " + historyData.length + " points");
