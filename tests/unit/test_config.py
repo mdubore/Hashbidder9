@@ -9,7 +9,7 @@ from hypothesis import given, settings, strategies
 from hypothesis.strategies import DrawFn, composite
 
 from hashbidder.config import SetBidsConfig, TargetHashrateConfig, load_config
-from hashbidder.domain.hashrate import Hashrate, HashUnit
+from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.sats import Sats
 from hashbidder.domain.time_unit import TimeUnit
 
@@ -497,6 +497,72 @@ identity = "worker1"
 """,
         )
         with pytest.raises(ValueError, match="Invalid mode"):
+            load_config(path)
+
+    def test_target_hashrate_with_max_price(self, tmp_path: Path) -> None:
+        """max_price_sat_per_ph_day parses into TargetHashrateConfig.max_price."""
+        path = _write_toml(
+            tmp_path,
+            """\
+mode = "target-hashrate"
+default_amount_sat = 100000
+target_hashrate_ph_s = 10.0
+max_bids_count = 3
+max_price_sat_per_ph_day = 600
+
+[upstream]
+url = "stratum+tcp://pool.example.com:3333"
+identity = "worker1"
+""",
+        )
+        config = load_config(path)
+        assert isinstance(config, TargetHashrateConfig)
+        assert config.max_price is not None
+        assert config.max_price.sats == Sats(600)
+        assert config.max_price.per == Hashrate(
+            Decimal(1), HashUnit.PH, TimeUnit.DAY
+        )
+
+    def test_target_hashrate_without_max_price_defaults_to_none(
+        self, tmp_path: Path
+    ) -> None:
+        """A target-hashrate config with no max_price_sat_per_ph_day parses as None."""
+        path = _write_toml(
+            tmp_path,
+            """\
+mode = "target-hashrate"
+default_amount_sat = 100000
+target_hashrate_ph_s = 10.0
+max_bids_count = 3
+
+[upstream]
+url = "stratum+tcp://pool.example.com:3333"
+identity = "worker1"
+""",
+        )
+        config = load_config(path)
+        assert isinstance(config, TargetHashrateConfig)
+        assert config.max_price is None
+
+    def test_target_hashrate_non_positive_max_price(self, tmp_path: Path) -> None:
+        """max_price_sat_per_ph_day <= 0 raises ValueError."""
+        path = _write_toml(
+            tmp_path,
+            """\
+mode = "target-hashrate"
+default_amount_sat = 100000
+target_hashrate_ph_s = 10.0
+max_bids_count = 3
+max_price_sat_per_ph_day = 0
+
+[upstream]
+url = "stratum+tcp://pool.example.com:3333"
+identity = "worker1"
+""",
+        )
+        with pytest.raises(
+            ValueError, match="max_price_sat_per_ph_day must be positive"
+        ):
             load_config(path)
 
 

@@ -86,6 +86,7 @@ class TargetHashrateModel(BaseConfigModel):
     upstream: UpstreamModel
     target_hashrate_ph_s: Decimal
     max_bids_count: int
+    max_price_sat_per_ph_day: int | None = None
 
     @field_validator("target_hashrate_ph_s")
     @classmethod
@@ -103,6 +104,14 @@ class TargetHashrateModel(BaseConfigModel):
             raise ValueError("max_bids_count must be >= 1")
         return v
 
+    @field_validator("max_price_sat_per_ph_day")
+    @classmethod
+    def validate_max_price(cls, v: int | None) -> int | None:
+        """Ensure max price, when set, is positive."""
+        if v is not None and v <= 0:
+            raise ValueError("max_price_sat_per_ph_day must be positive")
+        return v
+
 
 @dataclass(frozen=True)
 class TargetHashrateConfig:
@@ -112,6 +121,7 @@ class TargetHashrateConfig:
     upstream: Upstream
     target_hashrate: Hashrate
     max_bids_count: int
+    max_price: HashratePrice | None = None
 
 
 def load_config(path: Path) -> SetBidsConfig | TargetHashrateConfig:
@@ -143,6 +153,14 @@ def load_config(path: Path) -> SetBidsConfig | TargetHashrateConfig:
             parsed_target = TargetHashrateModel.model_validate(data)
         except Exception as e:
             raise ValueError(str(e)) from e
+        max_price = (
+            HashratePrice(
+                sats=Sats(parsed_target.max_price_sat_per_ph_day),
+                per=Hashrate(Decimal(1), HashUnit.PH, TimeUnit.DAY),
+            )
+            if parsed_target.max_price_sat_per_ph_day is not None
+            else None
+        )
         return TargetHashrateConfig(
             default_amount=Sats(parsed_target.default_amount_sat),
             upstream=Upstream(
@@ -153,6 +171,7 @@ def load_config(path: Path) -> SetBidsConfig | TargetHashrateConfig:
                 parsed_target.target_hashrate_ph_s, HashUnit.PH, TimeUnit.SECOND
             ),
             max_bids_count=parsed_target.max_bids_count,
+            max_price=max_price,
         )
     else:
         try:
