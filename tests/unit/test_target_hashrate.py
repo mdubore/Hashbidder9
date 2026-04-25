@@ -598,7 +598,10 @@ class TestIsBeingServed:
         assert _is_being_served(bid) is False
 
     def test_active_with_zero_current_speed_is_not_served(self) -> None:
-        """Stale ACTIVE with zero delivery -> not served (avoids preserving dead bids)."""
+        """Stale ACTIVE with zero delivery -> not served.
+
+        Avoids preserving dead bids that the API hasn't transitioned yet.
+        """
         bid = make_user_bid(
             "B1", 500, "1.0",
             status=BidStatus.ACTIVE,
