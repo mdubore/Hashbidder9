@@ -118,9 +118,7 @@ def _price_lt(a: HashratePrice, b: HashratePrice) -> bool:
     return a_sats < b_sats
 
 
-def _price_is_locked(
-    entry: BidWithCooldown, desired_price: HashratePrice
-) -> bool:
+def _price_is_locked(entry: BidWithCooldown, desired_price: HashratePrice) -> bool:
     """Whether this bid's current price should be preserved rather than reset.
 
     Two independent reasons to preserve:
@@ -130,9 +128,7 @@ def _price_is_locked(
     """
     if entry.cooldown.price_cooldown:
         return True
-    return _is_being_served(entry.bid) and _price_lt(
-        entry.bid.price, desired_price
-    )
+    return _is_being_served(entry.bid) and _price_lt(entry.bid.price, desired_price)
 
 
 def _effective_plan_price(
@@ -165,13 +161,9 @@ def _truncation_cost_signal(
     docstring and Task 8 design notes for the regime-A caveat.
     """
     eff_sats = int(
-        _effective_plan_price(entry, desired_price)
-        .to(HashUnit.EH, TimeUnit.DAY)
-        .sats
+        _effective_plan_price(entry, desired_price).to(HashUnit.EH, TimeUnit.DAY).sats
     )
-    speed_eh_s = entry.bid.speed_limit_ph.to(
-        HashUnit.EH, TimeUnit.SECOND
-    ).value
+    speed_eh_s = entry.bid.speed_limit_ph.to(HashUnit.EH, TimeUnit.SECOND).value
     return Decimal(eff_sats) * speed_eh_s
 
 

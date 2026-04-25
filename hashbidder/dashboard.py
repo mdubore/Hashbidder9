@@ -276,9 +276,7 @@ async def post_settings(
             )
             data["max_bids_count"] = int(max_bids_count) if max_bids_count else None
             data["max_price_sat_per_ph_day"] = (
-                int(max_price_sat_per_ph_day)
-                if max_price_sat_per_ph_day
-                else None
+                int(max_price_sat_per_ph_day) if max_price_sat_per_ph_day else None
             )
             TargetHashrateModel.model_validate(data)
         else:

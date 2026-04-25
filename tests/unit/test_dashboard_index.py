@@ -107,9 +107,7 @@ class TestSaveConfigToToml:
         assert config.max_price is not None
         assert int(config.max_price.sats) == 750
 
-    def test_target_hashrate_without_max_price_round_trip(
-        self, tmp_path: Path
-    ) -> None:
+    def test_target_hashrate_without_max_price_round_trip(self, tmp_path: Path) -> None:
         """Writing target-hashrate config without max_price is lossless."""
         from hashbidder.config import TargetHashrateConfig, load_config
         from hashbidder.dashboard import save_config_to_toml

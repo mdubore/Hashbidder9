@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+
 from hashbidder import use_cases
 from hashbidder.broadcast_hub import BroadcastHub
 from hashbidder.client import BidStatus, HashpowerClient

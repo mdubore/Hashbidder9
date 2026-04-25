@@ -458,7 +458,9 @@ class TestPlanWithCooldowns:
         Price preserved, speed freely redistributed.
         """
         bid = make_user_bid(
-            "B1", 400, "2.0",
+            "B1",
+            400,
+            "2.0",
             current_speed=_ph_s("2"),
             last_updated=_NOW - timedelta(seconds=3600),
         )
@@ -478,7 +480,9 @@ class TestPlanWithCooldowns:
     def test_served_cheap_bid_speed_can_be_reduced(self) -> None:
         """Served-cheap + no speed cooldown: current speed drops when needed drops."""
         bid = make_user_bid(
-            "B1", 400, "10.0",
+            "B1",
+            400,
+            "10.0",
             current_speed=_ph_s("10"),
             last_updated=_NOW - timedelta(seconds=3600),
         )
@@ -498,7 +502,9 @@ class TestPlanWithCooldowns:
     def test_served_cheap_with_speed_cooldown_keeps_both(self) -> None:
         """Served-cheap + speed cooldown: keep price (served) + speed (cooldown)."""
         bid = make_user_bid(
-            "B1", 400, "2.0",
+            "B1",
+            400,
+            "2.0",
             current_speed=_ph_s("2"),
             last_updated=_NOW - timedelta(seconds=10),
         )
@@ -517,7 +523,9 @@ class TestPlanWithCooldowns:
     def test_served_at_equal_price_not_preserved(self) -> None:
         """Served bid exactly at desired_price is not preserved (strict less-than)."""
         bid = make_user_bid(
-            "B1", 500, "2.0",
+            "B1",
+            500,
+            "2.0",
             current_speed=_ph_s("2"),
             last_updated=_NOW - timedelta(seconds=3600),
         )
@@ -534,7 +542,9 @@ class TestPlanWithCooldowns:
     def test_served_above_desired_not_preserved(self) -> None:
         """Served bid above desired_price is replanned at desired_price."""
         bid = make_user_bid(
-            "B1", 600, "2.0",
+            "B1",
+            600,
+            "2.0",
             current_speed=_ph_s("2"),
             last_updated=_NOW - timedelta(seconds=3600),
         )
@@ -551,7 +561,9 @@ class TestPlanWithCooldowns:
     def test_stale_active_zero_speed_not_preserved(self) -> None:
         """ACTIVE status but zero current_speed → not preserved (allows repricing)."""
         bid = make_user_bid(
-            "B1", 400, "2.0",
+            "B1",
+            400,
+            "2.0",
             current_speed=_ph_s("0"),
             last_updated=_NOW - timedelta(seconds=3600),
         )
@@ -570,9 +582,7 @@ class TestPlanWithCooldowns:
         cheap = make_user_bid(
             "B1", 300, "1.0", last_updated=_NOW - timedelta(seconds=10)
         )
-        mid = make_user_bid(
-            "B2", 500, "1.0", last_updated=_NOW - timedelta(seconds=10)
-        )
+        mid = make_user_bid("B2", 500, "1.0", last_updated=_NOW - timedelta(seconds=10))
         dear = make_user_bid(
             "B3", 900, "1.0", last_updated=_NOW - timedelta(seconds=10)
         )
@@ -612,9 +622,7 @@ class TestPlanWithCooldowns:
         cheap = make_user_bid(
             "B1", 300, "1.0", last_updated=_NOW - timedelta(seconds=10)
         )
-        mid = make_user_bid(
-            "B2", 400, "1.0", last_updated=_NOW - timedelta(seconds=10)
-        )
+        mid = make_user_bid("B2", 400, "1.0", last_updated=_NOW - timedelta(seconds=10))
         dear = make_user_bid(
             "B3", 450, "1.0", last_updated=_NOW - timedelta(seconds=10)
         )
@@ -690,7 +698,9 @@ class TestIsBeingServed:
     def test_active_with_positive_current_speed_is_served(self) -> None:
         """ACTIVE + non-zero current_speed -> being served."""
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.ACTIVE,
             current_speed=_ph_s("0.9"),
         )
@@ -709,7 +719,9 @@ class TestIsBeingServed:
         carries, with no staleness fallback.
         """
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.ACTIVE,
             current_speed=None,
         )
@@ -721,7 +733,9 @@ class TestIsBeingServed:
         Avoids preserving dead bids that the API hasn't transitioned yet.
         """
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.ACTIVE,
             current_speed=_ph_s("0"),
         )
@@ -730,7 +744,9 @@ class TestIsBeingServed:
     def test_created_is_not_served(self) -> None:
         """CREATED = accepted but not matched yet."""
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.CREATED,
             current_speed=_ph_s("1.0"),
         )
@@ -739,7 +755,9 @@ class TestIsBeingServed:
     def test_paused_is_not_served(self) -> None:
         """PAUSED bids are not matching."""
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.PAUSED,
             current_speed=_ph_s("1.0"),
         )
@@ -748,7 +766,9 @@ class TestIsBeingServed:
     def test_canceled_is_not_served(self) -> None:
         """CANCELED bids are not matching."""
         bid = make_user_bid(
-            "B1", 500, "1.0",
+            "B1",
+            500,
+            "1.0",
             status=BidStatus.CANCELED,
             current_speed=_ph_s("1.0"),
         )

@@ -27,13 +27,14 @@ def test_select_ocean_hashrate_returns_requested_window() -> None:
         windows=(
             HashrateWindow(window=OceanTimeWindow.DAY, hashrate=_ph_s("0.1")),
             HashrateWindow(window=OceanTimeWindow.TEN_MINUTES, hashrate=_ph_s("0.28")),
-            HashrateWindow(window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0.91")),
+            HashrateWindow(
+                window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0.91")
+            ),
         )
     )
 
-    assert (
-        _select_ocean_hashrate_phs(stats, OceanTimeWindow.SIXTY_SECONDS)
-        == Decimal("0.91")
+    assert _select_ocean_hashrate_phs(stats, OceanTimeWindow.SIXTY_SECONDS) == Decimal(
+        "0.91"
     )
 
 
@@ -77,7 +78,7 @@ async def test_tick_persists_braiins_estimated_speed_and_speed_limit(
     """The daemon should persist Braiins estimated speed and configured limit."""
     config_path = tmp_path / "bids.toml"
     config_path.write_text(
-        '\n'.join(
+        "\n".join(
             [
                 'mode = "explicit-bids"',
                 "default_amount_sat = 100000",
@@ -105,7 +106,9 @@ async def test_tick_persists_braiins_estimated_speed_and_speed_limit(
     ocean_source = _StaticOceanSource(
         AccountStats(
             windows=(
-                HashrateWindow(window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0")),
+                HashrateWindow(
+                    window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0")
+                ),
                 HashrateWindow(window=OceanTimeWindow.TEN_MINUTES, hashrate=_ph_s("0")),
                 HashrateWindow(window=OceanTimeWindow.DAY, hashrate=_ph_s("0.86")),
             ),
@@ -153,7 +156,9 @@ async def test_tick_collects_metrics_without_bids_config(
     ocean_source = _StaticOceanSource(
         AccountStats(
             windows=(
-                HashrateWindow(window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0")),
+                HashrateWindow(
+                    window=OceanTimeWindow.SIXTY_SECONDS, hashrate=_ph_s("0")
+                ),
                 HashrateWindow(window=OceanTimeWindow.TEN_MINUTES, hashrate=_ph_s("0")),
                 HashrateWindow(window=OceanTimeWindow.DAY, hashrate=_ph_s("0.86")),
             ),

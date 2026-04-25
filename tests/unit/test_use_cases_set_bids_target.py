@@ -300,9 +300,7 @@ class TestSetBidsTarget:
             ),
         )
 
-        result = await run_set_bids_target(
-            client, ocean, ADDRESS, config, dry_run=True
-        )
+        result = await run_set_bids_target(client, ocean, ADDRESS, config, dry_run=True)
         assert result.inputs.price.sats == Sats(1_000_000)
         assert result.inputs.price.per == EH_DAY
 
@@ -339,6 +337,4 @@ class TestSetBidsTarget:
         )
 
         with pytest.raises(ValueError, match="max_price"):
-            await run_set_bids_target(
-                client, ocean, ADDRESS, config, dry_run=True
-            )
+            await run_set_bids_target(client, ocean, ADDRESS, config, dry_run=True)

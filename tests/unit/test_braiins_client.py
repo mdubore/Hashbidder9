@@ -44,7 +44,10 @@ def _raw_bid_item(
     avg_speed_ph: str | None = None,
     delivered_hr_ph: str | None = None,
 ) -> dict[str, object]:
-    state_estimate: dict[str, object] = {"progress_pct": "10", "amount_remaining_sat": 90_000}
+    state_estimate: dict[str, object] = {
+        "progress_pct": "10",
+        "amount_remaining_sat": 90_000,
+    }
     if avg_speed_ph is not None:
         state_estimate["avg_speed_ph"] = avg_speed_ph
 
