@@ -291,6 +291,17 @@ class TestFindMarketPrice:
         with pytest.raises(ValueError, match="max_price"):
             find_market_price(orderbook, _TICK, max_price=max_price)
 
+    def test_max_price_exactly_equal_to_candidate_returns_candidate(self) -> None:
+        """When candidate equals cap, candidate is returned (strict > comparison)."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=500, hr_matched="2"),),
+            asks=(),
+        )
+        # candidate = align_down(500) + 100 = 600.
+        max_price = HashratePrice(sats=Sats(600), per=EH_DAY)
+        price = find_market_price(orderbook, _TICK, max_price=max_price)
+        assert price.sats == Sats(600)
+
 
 _NOW = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
 _SETTINGS = MarketSettings(

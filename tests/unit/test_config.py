@@ -9,7 +9,7 @@ from hypothesis import given, settings, strategies
 from hypothesis.strategies import DrawFn, composite
 
 from hashbidder.config import SetBidsConfig, TargetHashrateConfig, load_config
-from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
+from hashbidder.domain.hashrate import Hashrate, HashUnit
 from hashbidder.domain.sats import Sats
 from hashbidder.domain.time_unit import TimeUnit
 
@@ -519,9 +519,7 @@ identity = "worker1"
         assert isinstance(config, TargetHashrateConfig)
         assert config.max_price is not None
         assert config.max_price.sats == Sats(600)
-        assert config.max_price.per == Hashrate(
-            Decimal(1), HashUnit.PH, TimeUnit.DAY
-        )
+        assert config.max_price.per == Hashrate(Decimal(1), HashUnit.PH, TimeUnit.DAY)
 
     def test_target_hashrate_without_max_price_defaults_to_none(
         self, tmp_path: Path
