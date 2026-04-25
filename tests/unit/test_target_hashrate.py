@@ -565,6 +565,124 @@ class TestPlanWithCooldowns:
         for entry in result:
             assert entry.price == DESIRED_PRICE
 
+    def test_speed_locked_exceeding_max_bids_is_truncated(self) -> None:
+        """All speed-locked + all price-locked: keep the cheapest up to the cap."""
+        cheap = make_user_bid(
+            "B1", 300, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        mid = make_user_bid(
+            "B2", 500, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        dear = make_user_bid(
+            "B3", 900, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("5"),
+            max_bids_count=2,
+            bids=(
+                _annotated(cheap, price_cd=True, speed_cd=True),
+                _annotated(mid, price_cd=True, speed_cd=True),
+                _annotated(dear, price_cd=True, speed_cd=True),
+            ),
+        )
+        assert len(result) == 2
+        kept_prices = {r.price for r in result}
+        assert cheap.price in kept_prices
+        assert mid.price in kept_prices
+        assert dear.price not in kept_prices
+
+    def test_speed_locked_truncation_uses_effective_plan_price(self) -> None:
+        """Truncation cost signal uses effective plan price, not raw bid.price.
+
+        Three speed-locked bids at 300/400/450 sat/PH/Day, all 1 PH/s, only
+        the 450 bid is price-locked. desired_price=500, max_bids_count=2.
+
+        - cheap (id=B1, 300, not price-locked): repriced to 500 -> effective = 500
+        - mid   (id=B2, 400, not price-locked): repriced to 500 -> effective = 500
+        - dear  (id=B3, 450, price-locked):      keeps price    -> effective = 450
+
+        Cost signals (effective x speed): cheap=500, mid=500, dear=450.
+        Tuple keys with bid.id tiebreak: (450,B3) < (500,B1) < (500,B2).
+        Truncated to 2: dear + cheap. mid is dropped.
+
+        A raw-bid.price sort would have kept [cheap, mid] (both repriced
+        to 500), costing 1000 vs the correct plan's 950.
+        """
+        cheap = make_user_bid(
+            "B1", 300, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        mid = make_user_bid(
+            "B2", 400, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        dear = make_user_bid(
+            "B3", 450, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,  # 500 sat/PH/Day
+            needed=_ph_s("5"),
+            max_bids_count=2,
+            bids=(
+                _annotated(cheap, price_cd=False, speed_cd=True),
+                _annotated(mid, price_cd=False, speed_cd=True),
+                _annotated(dear, price_cd=True, speed_cd=True),
+            ),
+        )
+        assert len(result) == 2
+        prices = [r.price for r in result]
+        # dear (price-locked) kept at its 450 price
+        assert dear.price in prices
+        # cheap (B1) kept and repriced to desired_price; B2 (mid) dropped
+        # because its bid.id sorts after B1 on the equal-cost-signal tie.
+        assert DESIRED_PRICE in prices
+        assert mid.price not in prices
+
+    def test_speed_locked_truncation_uses_total_cost_not_unit_price(
+        self,
+    ) -> None:
+        """Truncation uses effective_price x speed, not unit price alone.
+
+        Three speed-locked, all price-locked bids:
+        - cheap_high (id=B1, 300, 10 PH/s): effective=300, signal=3000
+        - exp_mid    (id=B2, 460,  5 PH/s): effective=460, signal=2300
+        - mid_low    (id=B3, 450,  1 PH/s): effective=450, signal=450
+        desired_price=500, max_bids_count=2.
+
+        By unit price alone we would keep [cheap_high (300), mid_low (450)],
+        paying 300x10 + 450x1 = 3450.
+        By total cost we keep [mid_low (450), exp_mid (460x5=2300)], paying
+        2750 - cheaper despite a higher unit price on exp_mid.
+
+        Note: this minimizes spend among kept bids but can under-supply
+        `needed` since cancelled speed-locked speed is not replaced
+        (remaining_slots is 0 after a full truncation). See plan design
+        notes for the regime-A caveat.
+        """
+        cheap_high = make_user_bid(
+            "B1", 300, "10.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        exp_mid = make_user_bid(
+            "B2", 460, "5.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        mid_low = make_user_bid(
+            "B3", 450, "1.0", last_updated=_NOW - timedelta(seconds=10)
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("12"),
+            max_bids_count=2,
+            bids=(
+                _annotated(cheap_high, price_cd=True, speed_cd=True),
+                _annotated(exp_mid, price_cd=True, speed_cd=True),
+                _annotated(mid_low, price_cd=True, speed_cd=True),
+            ),
+        )
+        assert len(result) == 2
+        prices = {r.price for r in result}
+        assert mid_low.price in prices  # signal 450, lowest
+        assert exp_mid.price in prices  # signal 2300, second lowest
+        assert cheap_high.price not in prices  # signal 3000, highest - dropped
+
 
 class TestIsBeingServed:
     """Tests for _is_being_served."""

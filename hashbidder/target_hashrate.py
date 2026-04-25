@@ -135,6 +135,46 @@ def _price_is_locked(
     )
 
 
+def _effective_plan_price(
+    entry: BidWithCooldown, desired_price: HashratePrice
+) -> HashratePrice:
+    """Price this bid will end up at in the next plan.
+
+    Price-locked bids keep their current price; everything else is
+    repriced to desired_price. This is the correct price signal when
+    reasoning about a kept bid's cost contribution, because
+    `entry.bid.price` alone misleads whenever a bid would be repriced.
+    """
+    if _price_is_locked(entry, desired_price):
+        return entry.bid.price
+    return desired_price
+
+
+def _truncation_cost_signal(
+    entry: BidWithCooldown, desired_price: HashratePrice
+) -> Decimal:
+    """Total spend contribution of keeping this speed-locked bid.
+
+    `effective_plan_price * speed_limit_ph`, normalized to a fixed
+    unit pair (sat/EH/Day x EH/s) so signals from bids with different
+    natural units are directly comparable. Used as the primary key
+    when truncating speed_locked at max_bids_count: smaller signal =
+    cheaper to keep, ranked first.
+
+    Heuristic, not provably optimal — see plan_with_cooldowns
+    docstring and Task 8 design notes for the regime-A caveat.
+    """
+    eff_sats = int(
+        _effective_plan_price(entry, desired_price)
+        .to(HashUnit.EH, TimeUnit.DAY)
+        .sats
+    )
+    speed_eh_s = entry.bid.speed_limit_ph.to(
+        HashUnit.EH, TimeUnit.SECOND
+    ).value
+    return Decimal(eff_sats) * speed_eh_s
+
+
 def plan_with_cooldowns(
     desired_price: HashratePrice,
     needed: Hashrate,
@@ -153,12 +193,22 @@ def plan_with_cooldowns(
       - speed_cooldown=True: keep the current speed_limit_ph. Consumes one
         slot from max_bids_count and its speed counts against `needed`.
       - otherwise: speed is re-assigned by distribute_bids.
+      - If more than `max_bids_count` bids are speed-locked, keep the
+        cheapest by `effective_plan_price x speed_limit_ph` (with
+        `bid.id` as a deterministic tiebreaker). See
+        `_truncation_cost_signal` for the heuristic's caveats.
 
     The remaining hashrate budget is split via distribute_bids and assigned
     first to price-locked bids (preserving their old price), then to free
     slots at desired_price.
     """
-    speed_locked = [b for b in bids if b.cooldown.speed_cooldown]
+    speed_locked = sorted(
+        (b for b in bids if b.cooldown.speed_cooldown),
+        key=lambda b: (
+            _truncation_cost_signal(b, desired_price),
+            str(b.bid.id),
+        ),
+    )[:max_bids_count]
     price_locked_only = [
         b
         for b in bids
