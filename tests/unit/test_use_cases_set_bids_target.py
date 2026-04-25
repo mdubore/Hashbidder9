@@ -282,3 +282,63 @@ class TestSetBidsTarget:
             client, ocean, ADDRESS, _config("10"), dry_run=True
         )
         assert result.inputs.ocean_24h == _ph_s("5")
+
+    @pytest.mark.asyncio
+    async def test_max_price_caps_discovered_market_price(self) -> None:
+        """config.max_price pins the planner's price when market is above it."""
+        client = FakeClient(orderbook=_orderbook(served_price_sat=2_000_000))
+        ocean = FakeOceanSource(account_stats=_account_stats("5"))
+
+        config = TargetHashrateConfig(
+            default_amount=Sats(100_000),
+            upstream=UPSTREAM,
+            target_hashrate=_ph_s("10"),
+            max_bids_count=3,
+            max_price=HashratePrice(
+                sats=Sats(1000),
+                per=Hashrate(Decimal(1), HashUnit.PH, TimeUnit.DAY),
+            ),
+        )
+
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, config, dry_run=True
+        )
+        assert result.inputs.price.sats == Sats(1_000_000)
+        assert result.inputs.price.per == EH_DAY
+
+    @pytest.mark.asyncio
+    async def test_no_max_price_uses_market_price_unchanged(self) -> None:
+        """When config.max_price is None, price equals cheapest + 1 tick."""
+        client = FakeClient(orderbook=_orderbook(served_price_sat=800_000))
+        ocean = FakeOceanSource(account_stats=_account_stats("5"))
+
+        result = await run_set_bids_target(
+            client, ocean, ADDRESS, _config("10"), dry_run=True
+        )
+        assert result.inputs.price.sats == Sats(801_000)
+
+    @pytest.mark.asyncio
+    async def test_sub_tick_max_price_raises_at_bid_time(self) -> None:
+        """A cap that aligns to zero at the market tick is rejected here.
+
+        Config parsing only enforces `max_price > 0` (a structural check),
+        because the market's price_tick is not known when bids.toml is
+        written. Tick-alignment is checked at bid time by find_market_price.
+        """
+        client = FakeClient(orderbook=_orderbook(served_price_sat=800_000))
+        ocean = FakeOceanSource(account_stats=_account_stats("5"))
+
+        config = TargetHashrateConfig(
+            default_amount=Sats(100_000),
+            upstream=UPSTREAM,
+            target_hashrate=_ph_s("10"),
+            max_bids_count=3,
+            # 1 sat/EH/Day is positive (passes config validation) but
+            # aligns to zero at any realistic market tick.
+            max_price=HashratePrice(sats=Sats(1), per=EH_DAY),
+        )
+
+        with pytest.raises(ValueError, match="max_price"):
+            await run_set_bids_target(
+                client, ocean, ADDRESS, config, dry_run=True
+            )

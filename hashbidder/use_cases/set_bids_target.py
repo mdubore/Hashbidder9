@@ -80,7 +80,9 @@ async def run_set_bids_target(
     ocean_24h = await _ocean_24h(ocean, address)
     settings = await client.get_market_settings()
     orderbook = await client.get_orderbook()
-    price = find_market_price(orderbook, settings.price_tick)
+    price = find_market_price(
+        orderbook, settings.price_tick, max_price=config.max_price
+    )
     needed = compute_needed_hashrate(config.target_hashrate, ocean_24h)
 
     current_bids = await client.get_current_bids()
