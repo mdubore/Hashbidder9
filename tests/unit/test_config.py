@@ -565,6 +565,27 @@ identity = "worker1"
         ):
             load_config(path)
 
+    def test_target_hashrate_negative_max_price(self, tmp_path: Path) -> None:
+        """Negative max_price_sat_per_ph_day raises ValueError."""
+        path = _write_toml(
+            tmp_path,
+            """\
+mode = "target-hashrate"
+default_amount_sat = 100000
+target_hashrate_ph_s = 10.0
+max_bids_count = 3
+max_price_sat_per_ph_day = -1
+
+[upstream]
+url = "stratum+tcp://pool.example.com:3333"
+identity = "worker1"
+""",
+        )
+        with pytest.raises(
+            ValueError, match="max_price_sat_per_ph_day must be positive"
+        ):
+            load_config(path)
+
 
 def _load_from_string(toml_str: str) -> SetBidsConfig:
     """Write TOML to a temp file and load it as an explicit-bids config."""
