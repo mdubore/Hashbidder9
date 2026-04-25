@@ -74,6 +74,7 @@ def make_user_bid(
     remaining: int | None = None,
     upstream: Upstream | None = None,
     last_updated: datetime = DEFAULT_LAST_UPDATED,
+    current_speed: Hashrate | None = None,
 ) -> UserBid:
     """Build a UserBid for tests.
 
@@ -90,6 +91,7 @@ def make_user_bid(
         amount_remaining_sat=Sats(remaining if remaining is not None else amount),
         last_updated=last_updated,
         upstream=upstream or UPSTREAM,
+        current_speed=current_speed,
     )
 
 

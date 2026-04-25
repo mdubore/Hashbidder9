@@ -4,11 +4,33 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from hashbidder.client import MarketSettings, OrderBook, UserBid
+from hashbidder.client import BidStatus, MarketSettings, OrderBook, UserBid
 from hashbidder.domain.bid_config import BidConfig
 from hashbidder.domain.hashrate import Hashrate, HashratePrice, HashUnit
 from hashbidder.domain.price_tick import PriceTick
 from hashbidder.domain.time_unit import TimeUnit
+
+
+def _is_being_served(bid: UserBid) -> bool:
+    """Whether this bid is currently matched AND delivering.
+
+    Requires BidStatus.ACTIVE plus a positive current_speed report.
+
+    Why both signals (deliberate false-negative tradeoff):
+      - BidStatus.ACTIVE alone can lag reality. A bid may briefly show
+        ACTIVE after delivery has stopped; preserving such a bid would
+        suppress needed repricing.
+      - A missing current_speed (None) also fails this check. We
+        deliberately choose false negatives over false positives: during
+        a transient telemetry gap we'd rather allow a one-tick repricing
+        than persistently lock a bid that may no longer be served.
+      - Sustained telemetry loss is out of scope for this predicate.
+        The upstream client owns that concern; we use only the signals
+        the UserBid carries, without staleness fallbacks.
+    """
+    if bid.status != BidStatus.ACTIVE:
+        return False
+    return bid.current_speed is not None and bid.current_speed.value > 0
 
 
 def compute_needed_hashrate(target: Hashrate, current_24h: Hashrate) -> Hashrate:
