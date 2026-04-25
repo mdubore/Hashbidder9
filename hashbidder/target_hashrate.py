@@ -145,17 +145,38 @@ def plan_with_cooldowns(
     return locked_entries + tuple(free_entries)
 
 
-def find_market_price(orderbook: OrderBook, tick: PriceTick) -> HashratePrice:
+def find_market_price(
+    orderbook: OrderBook,
+    tick: PriceTick,
+    max_price: HashratePrice | None = None,
+) -> HashratePrice:
     """Lowest served bid, undercut (from above) by one price tick.
 
     The cheapest served price is aligned down to the tick grid first to
-    guarantee the result lands on a valid tick.
+    guarantee the result lands on a valid tick. If `max_price` is provided,
+    the result is capped at `max_price` aligned down to the tick. A cap
+    that aligns to zero at the current tick is rejected to avoid silently
+    pinning at a sub-market price.
 
     Raises:
-        ValueError: If no bid in the order book has hr_matched_ph > 0.
+        ValueError: If the order book has no served bid, or if
+            max_price aligns to zero at the current tick.
     """
     served = [b for b in orderbook.bids if b.hr_matched_ph.value > 0]
     if not served:
         raise ValueError("Order book has no served bids; cannot pick a price")
     cheapest = min(served, key=lambda b: b.price.sats)
-    return tick.add_one(tick.align_down(cheapest.price))
+    candidate = tick.add_one(tick.align_down(cheapest.price))
+    if max_price is None:
+        return candidate
+    cap = tick.align_down(max_price)
+    cap_sats = int(cap.to(HashUnit.EH, TimeUnit.DAY).sats)
+    if cap_sats == 0:
+        raise ValueError(
+            f"max_price {max_price} aligns to zero at tick "
+            f"{int(tick.sats)} sat/EH/Day; choose a cap >= one tick"
+        )
+    candidate_sats = int(candidate.to(HashUnit.EH, TimeUnit.DAY).sats)
+    if candidate_sats > cap_sats:
+        return cap
+    return candidate

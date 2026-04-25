@@ -228,6 +228,69 @@ class TestFindMarketPrice:
         with pytest.raises(ValueError, match="no served bids"):
             find_market_price(OrderBook(bids=(), asks=()), _TICK)
 
+    def test_max_price_caps_result(self) -> None:
+        """When cheapest-served + 1 tick exceeds max_price, return the cap."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=1500, hr_matched="2"),),
+            asks=(),
+        )
+        max_price = HashratePrice(sats=Sats(1200), per=EH_DAY)
+        price = find_market_price(orderbook, _TICK, max_price=max_price)
+        # Without cap: 1500 → aligned 1500 + 100 tick = 1600. Capped at 1200.
+        assert price.sats == Sats(1200)
+
+    def test_max_price_not_reached_returns_market(self) -> None:
+        """When the cap is above the market price, cap has no effect."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=500, hr_matched="2"),),
+            asks=(),
+        )
+        max_price = HashratePrice(sats=Sats(1200), per=EH_DAY)
+        price = find_market_price(orderbook, _TICK, max_price=max_price)
+        assert price.sats == Sats(600)
+
+    def test_max_price_aligned_down_to_tick(self) -> None:
+        """A max_price not on the tick grid is aligned down before capping."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=2000, hr_matched="2"),),
+            asks=(),
+        )
+        max_price = HashratePrice(sats=Sats(1234), per=EH_DAY)
+        price = find_market_price(orderbook, _TICK, max_price=max_price)
+        assert price.sats == Sats(1200)
+
+    def test_max_price_in_ph_day_units(self) -> None:
+        """Cap provided in sat/PH/Day is correctly converted to sat/EH/Day."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=2_000_000, hr_matched="2"),),
+            asks=(),
+        )
+        # 1000 sat/PH/Day == 1_000_000 sat/EH/Day
+        max_price = HashratePrice(sats=Sats(1000), per=PH_DAY)
+        price = find_market_price(orderbook, _TICK, max_price=max_price)
+        assert price.sats == Sats(1_000_000)
+        assert price.per == EH_DAY
+
+    def test_no_max_price_matches_old_behavior(self) -> None:
+        """Omitting max_price leaves existing behavior unchanged."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=800, hr_matched="3"),),
+            asks=(),
+        )
+        price = find_market_price(orderbook, _TICK)
+        assert price.sats == Sats(900)
+
+    def test_max_price_below_one_tick_raises(self) -> None:
+        """A max_price that aligns down to zero is rejected."""
+        orderbook = OrderBook(
+            bids=(_bid_item(price_sat=500, hr_matched="2"),),
+            asks=(),
+        )
+        # _TICK is 100 sat/EH/Day; a cap of 50 sat/EH/Day aligns down to 0.
+        max_price = HashratePrice(sats=Sats(50), per=EH_DAY)
+        with pytest.raises(ValueError, match="max_price"):
+            find_market_price(orderbook, _TICK, max_price=max_price)
+
 
 _NOW = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
 _SETTINGS = MarketSettings(
