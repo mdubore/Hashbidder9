@@ -452,6 +452,119 @@ class TestPlanWithCooldowns:
         assert len(result) == 1
         assert result[0].speed_limit == _ph_s("10")
 
+    def test_served_cheap_bid_keeps_price_redistributes_speed(self) -> None:
+        """Served bid below desired_price.
+
+        Price preserved, speed freely redistributed.
+        """
+        bid = make_user_bid(
+            "B1", 400, "2.0",
+            current_speed=_ph_s("2"),
+            last_updated=_NOW - timedelta(seconds=3600),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,  # 500 sat/PH/Day
+            needed=_ph_s("4"),
+            max_bids_count=2,
+            bids=(_annotated(bid, price_cd=False, speed_cd=False),),
+        )
+        # distribute_bids(4, 2) → (2, 2). Slot 0 inherits bid.price; slot 1 desired.
+        assert len(result) == 2
+        assert result[0].price == bid.price
+        assert result[0].speed_limit == _ph_s("2")
+        assert result[1].price == DESIRED_PRICE
+        assert result[1].speed_limit == _ph_s("2")
+
+    def test_served_cheap_bid_speed_can_be_reduced(self) -> None:
+        """Served-cheap + no speed cooldown: current speed drops when needed drops."""
+        bid = make_user_bid(
+            "B1", 400, "10.0",
+            current_speed=_ph_s("10"),
+            last_updated=_NOW - timedelta(seconds=3600),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("2"),
+            max_bids_count=3,
+            bids=(_annotated(bid, price_cd=False, speed_cd=False),),
+        )
+        # distribute_bids(2, 3) → (1, 1). Bid's speed DROPS from 10 to 1 (price kept).
+        assert len(result) == 2
+        assert result[0].price == bid.price
+        assert result[0].speed_limit == _ph_s("1")
+        assert result[1].price == DESIRED_PRICE
+        assert result[1].speed_limit == _ph_s("1")
+
+    def test_served_cheap_with_speed_cooldown_keeps_both(self) -> None:
+        """Served-cheap + speed cooldown: keep price (served) + speed (cooldown)."""
+        bid = make_user_bid(
+            "B1", 400, "2.0",
+            current_speed=_ph_s("2"),
+            last_updated=_NOW - timedelta(seconds=10),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("5"),
+            max_bids_count=3,
+            bids=(_annotated(bid, price_cd=False, speed_cd=True),),
+        )
+        assert result[0].price == bid.price
+        assert result[0].speed_limit == _ph_s("2")
+        assert len(result) == 3
+        for entry in result[1:]:
+            assert entry.price == DESIRED_PRICE
+
+    def test_served_at_equal_price_not_preserved(self) -> None:
+        """Served bid exactly at desired_price is not preserved (strict less-than)."""
+        bid = make_user_bid(
+            "B1", 500, "2.0",
+            current_speed=_ph_s("2"),
+            last_updated=_NOW - timedelta(seconds=3600),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("4"),
+            max_bids_count=2,
+            bids=(_annotated(bid, price_cd=False, speed_cd=False),),
+        )
+        assert len(result) == 2
+        for entry in result:
+            assert entry.price == DESIRED_PRICE
+
+    def test_served_above_desired_not_preserved(self) -> None:
+        """Served bid above desired_price is replanned at desired_price."""
+        bid = make_user_bid(
+            "B1", 600, "2.0",
+            current_speed=_ph_s("2"),
+            last_updated=_NOW - timedelta(seconds=3600),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("4"),
+            max_bids_count=2,
+            bids=(_annotated(bid, price_cd=False, speed_cd=False),),
+        )
+        assert len(result) == 2
+        for entry in result:
+            assert entry.price == DESIRED_PRICE
+
+    def test_stale_active_zero_speed_not_preserved(self) -> None:
+        """ACTIVE status but zero current_speed → not preserved (allows repricing)."""
+        bid = make_user_bid(
+            "B1", 400, "2.0",
+            current_speed=_ph_s("0"),
+            last_updated=_NOW - timedelta(seconds=3600),
+        )
+        result = plan_with_cooldowns(
+            desired_price=DESIRED_PRICE,
+            needed=_ph_s("4"),
+            max_bids_count=2,
+            bids=(_annotated(bid, price_cd=False, speed_cd=False),),
+        )
+        assert len(result) == 2
+        for entry in result:
+            assert entry.price == DESIRED_PRICE
+
 
 class TestIsBeingServed:
     """Tests for _is_being_served."""

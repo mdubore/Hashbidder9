@@ -111,29 +111,58 @@ def check_cooldowns(
     )
 
 
+def _price_lt(a: HashratePrice, b: HashratePrice) -> bool:
+    """Strict less-than on two HashratePrice values (normalized to sat/EH/Day)."""
+    a_sats = int(a.to(HashUnit.EH, TimeUnit.DAY).sats)
+    b_sats = int(b.to(HashUnit.EH, TimeUnit.DAY).sats)
+    return a_sats < b_sats
+
+
+def _price_is_locked(
+    entry: BidWithCooldown, desired_price: HashratePrice
+) -> bool:
+    """Whether this bid's current price should be preserved rather than reset.
+
+    Two independent reasons to preserve:
+      - the price-decrease cooldown has not elapsed (can't lower it yet); or
+      - the bid is actively served at a price below desired_price (raising
+        would pay more for hashrate we're already buying cheaper).
+    """
+    if entry.cooldown.price_cooldown:
+        return True
+    return _is_being_served(entry.bid) and _price_lt(
+        entry.bid.price, desired_price
+    )
+
+
 def plan_with_cooldowns(
     desired_price: HashratePrice,
     needed: Hashrate,
     max_bids_count: int,
     bids: tuple[BidWithCooldown, ...],
 ) -> tuple[BidConfig, ...]:
-    """Build a bid plan that respects per-bid cooldown constraints.
+    """Build a bid plan that respects per-bid cooldown and served-price constraints.
 
-    Rules:
-      - speed_cooldown=True: keep the bid's current speed limit (cannot lower).
-        Such a bid consumes one slot from `max_bids_count` and its current
-        speed is subtracted from `needed`.
-      - price_cooldown=True (and not speed_cooldown): keep the bid's current
-        price; speed is freely re-assigned from the remaining distribution.
-      - Bids with no cooldown are treated as fresh slots at `desired_price`.
+    Price preservation rules (via `_price_is_locked`):
+      - price_cooldown=True: keep the bid's current price (cannot lower yet).
+      - served at a price strictly below desired_price: keep the bid's price
+        (raising it would pay more for hashrate already being served cheaper).
+      - otherwise: use desired_price.
 
-    The remaining hashrate budget is split via `distribute_bids` and assigned
-    first to price-locked bids (preserving their old price), then to brand-new
-    slots at `desired_price`.
+    Speed rules:
+      - speed_cooldown=True: keep the current speed_limit_ph. Consumes one
+        slot from max_bids_count and its speed counts against `needed`.
+      - otherwise: speed is re-assigned by distribute_bids.
+
+    The remaining hashrate budget is split via distribute_bids and assigned
+    first to price-locked bids (preserving their old price), then to free
+    slots at desired_price.
     """
     speed_locked = [b for b in bids if b.cooldown.speed_cooldown]
     price_locked_only = [
-        b for b in bids if b.cooldown.price_cooldown and not b.cooldown.speed_cooldown
+        b
+        for b in bids
+        if _price_is_locked(b, desired_price) and not b.cooldown.speed_cooldown
     ]
 
     locked_speed_total = Hashrate(Decimal(0), HashUnit.PH, TimeUnit.SECOND)
@@ -142,7 +171,11 @@ def plan_with_cooldowns(
 
     locked_entries = tuple(
         BidConfig(
-            price=entry.bid.price if entry.cooldown.price_cooldown else desired_price,
+            price=(
+                entry.bid.price
+                if _price_is_locked(entry, desired_price)
+                else desired_price
+            ),
             speed_limit=entry.bid.speed_limit_ph,
         )
         for entry in speed_locked
