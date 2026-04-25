@@ -304,6 +304,71 @@ class TestFindMarketPrice:
         assert price.sats == Sats(600)
 
 
+class TestIsBeingServed:
+    """Tests for _is_being_served."""
+
+    def test_active_with_positive_current_speed_is_served(self) -> None:
+        """ACTIVE + non-zero current_speed -> being served."""
+        bid = make_user_bid(
+            "B1",
+            500,
+            "1.0",
+            status=BidStatus.ACTIVE,
+            current_speed=_ph_s("0.9"),
+        )
+        assert _is_being_served(bid) is True
+
+    def test_active_with_none_current_speed_is_not_served_deliberate_false_negative(
+        self,
+    ) -> None:
+        """ACTIVE but no current_speed report -> not served.
+
+        This is a deliberate false negative: during transient telemetry gaps
+        we prefer the (rare) cost of allowing a repricing that pays more for
+        one tick over persistently locking in a bid that may no longer be
+        served. Upstream clients are responsible for handling sustained
+        telemetry loss — this predicate uses only the signals the UserBid
+        carries, with no staleness fallback.
+        """
+        bid = make_user_bid(
+            "B1",
+            500,
+            "1.0",
+            status=BidStatus.ACTIVE,
+            current_speed=None,
+        )
+        assert _is_being_served(bid) is False
+
+    def test_active_with_zero_current_speed_is_not_served(self) -> None:
+        """Stale ACTIVE with zero delivery -> not served.
+
+        Avoids preserving dead bids that the API hasn't transitioned yet.
+        """
+        bid = make_user_bid(
+            "B1",
+            500,
+            "1.0",
+            status=BidStatus.ACTIVE,
+            current_speed=_ph_s("0"),
+        )
+        assert _is_being_served(bid) is False
+
+    @pytest.mark.parametrize(
+        "status",
+        [s for s in BidStatus if s is not BidStatus.ACTIVE],
+    )
+    def test_non_active_status_is_not_served(self, status: BidStatus) -> None:
+        """Any non-ACTIVE status is not being served, even with positive speed."""
+        bid = make_user_bid(
+            "B1",
+            500,
+            "1.0",
+            status=status,
+            current_speed=_ph_s("1.0"),
+        )
+        assert _is_being_served(bid) is False
+
+
 _NOW = datetime(2026, 4, 12, 12, 0, 0, tzinfo=UTC)
 _SETTINGS = MarketSettings(
     min_bid_price_decrease_period=timedelta(seconds=600),
@@ -690,86 +755,3 @@ class TestPlanWithCooldowns:
         assert mid_low.price in prices  # signal 450, lowest
         assert exp_mid.price in prices  # signal 2300, second lowest
         assert cheap_high.price not in prices  # signal 3000, highest - dropped
-
-
-class TestIsBeingServed:
-    """Tests for _is_being_served."""
-
-    def test_active_with_positive_current_speed_is_served(self) -> None:
-        """ACTIVE + non-zero current_speed -> being served."""
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.ACTIVE,
-            current_speed=_ph_s("0.9"),
-        )
-        assert _is_being_served(bid) is True
-
-    def test_active_with_none_current_speed_is_not_served_deliberate_false_negative(
-        self,
-    ) -> None:
-        """ACTIVE but no current_speed report -> not served.
-
-        This is a deliberate false negative: during transient telemetry gaps
-        we prefer the (rare) cost of allowing a repricing that pays more for
-        one tick over persistently locking in a bid that may no longer be
-        served. Upstream clients are responsible for handling sustained
-        telemetry loss — this predicate uses only the signals the UserBid
-        carries, with no staleness fallback.
-        """
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.ACTIVE,
-            current_speed=None,
-        )
-        assert _is_being_served(bid) is False
-
-    def test_active_with_zero_current_speed_is_not_served(self) -> None:
-        """Stale ACTIVE with zero delivery -> not served.
-
-        Avoids preserving dead bids that the API hasn't transitioned yet.
-        """
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.ACTIVE,
-            current_speed=_ph_s("0"),
-        )
-        assert _is_being_served(bid) is False
-
-    def test_created_is_not_served(self) -> None:
-        """CREATED = accepted but not matched yet."""
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.CREATED,
-            current_speed=_ph_s("1.0"),
-        )
-        assert _is_being_served(bid) is False
-
-    def test_paused_is_not_served(self) -> None:
-        """PAUSED bids are not matching."""
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.PAUSED,
-            current_speed=_ph_s("1.0"),
-        )
-        assert _is_being_served(bid) is False
-
-    def test_canceled_is_not_served(self) -> None:
-        """CANCELED bids are not matching."""
-        bid = make_user_bid(
-            "B1",
-            500,
-            "1.0",
-            status=BidStatus.CANCELED,
-            current_speed=_ph_s("1.0"),
-        )
-        assert _is_being_served(bid) is False
