@@ -128,6 +128,9 @@ def save_config_to_toml(data: dict[str, Any], path: Path) -> None:
     if data.get("mode") == "target-hashrate":
         lines.append(f"target_hashrate_ph_s = {data['target_hashrate_ph_s']}")
         lines.append(f"max_bids_count = {data['max_bids_count']}")
+        max_price = data.get("max_price_sat_per_ph_day")
+        if max_price is not None:
+            lines.append(f"max_price_sat_per_ph_day = {max_price}")
 
     lines.append("")
     lines.append("[upstream]")
@@ -254,10 +257,11 @@ async def post_settings(
     upstream_identity: Annotated[str, Form()],
     target_hashrate_ph_s: Annotated[str | None, Form()] = None,
     max_bids_count: Annotated[str | None, Form()] = None,
+    max_price_sat_per_ph_day: Annotated[str | None, Form()] = None,
 ) -> HTMLResponse:
     """Save updated settings to config file."""
     try:
-        data = {
+        data: dict[str, Any] = {
             "mode": mode,
             "default_amount_sat": default_amount_sat,
             "upstream": {
@@ -271,6 +275,11 @@ async def post_settings(
                 Decimal(target_hashrate_ph_s) if target_hashrate_ph_s else None
             )
             data["max_bids_count"] = int(max_bids_count) if max_bids_count else None
+            data["max_price_sat_per_ph_day"] = (
+                int(max_price_sat_per_ph_day)
+                if max_price_sat_per_ph_day
+                else None
+            )
             TargetHashrateModel.model_validate(data)
         else:
             # For now, explicit-bids with no bids from form

@@ -77,3 +77,58 @@ async def test_index_embeds_parseable_history_json(
     assert "Braiins Estimated Speed" in response.text
     assert "Braiins Speed Limit" in response.text
     assert "Braiins Delivered Avg" not in response.text
+
+
+class TestSaveConfigToToml:
+    """Round-trip tests for dashboard.save_config_to_toml."""
+
+    def test_target_hashrate_with_max_price_round_trip(self, tmp_path: Path) -> None:
+        """Writing + reading target-hashrate config with max_price is lossless."""
+        from hashbidder.config import TargetHashrateConfig, load_config
+        from hashbidder.dashboard import save_config_to_toml
+
+        path = tmp_path / "bids.toml"
+        save_config_to_toml(
+            {
+                "mode": "target-hashrate",
+                "default_amount_sat": 100000,
+                "target_hashrate_ph_s": Decimal("10.0"),
+                "max_bids_count": 3,
+                "max_price_sat_per_ph_day": 750,
+                "upstream": {
+                    "url": "stratum+tcp://pool.example.com:3333",
+                    "identity": "worker1",
+                },
+            },
+            path,
+        )
+        config = load_config(path)
+        assert isinstance(config, TargetHashrateConfig)
+        assert config.max_price is not None
+        assert int(config.max_price.sats) == 750
+
+    def test_target_hashrate_without_max_price_round_trip(
+        self, tmp_path: Path
+    ) -> None:
+        """Writing target-hashrate config without max_price is lossless."""
+        from hashbidder.config import TargetHashrateConfig, load_config
+        from hashbidder.dashboard import save_config_to_toml
+
+        path = tmp_path / "bids.toml"
+        save_config_to_toml(
+            {
+                "mode": "target-hashrate",
+                "default_amount_sat": 100000,
+                "target_hashrate_ph_s": Decimal("10.0"),
+                "max_bids_count": 3,
+                "max_price_sat_per_ph_day": None,
+                "upstream": {
+                    "url": "stratum+tcp://pool.example.com:3333",
+                    "identity": "worker1",
+                },
+            },
+            path,
+        )
+        config = load_config(path)
+        assert isinstance(config, TargetHashrateConfig)
+        assert config.max_price is None
